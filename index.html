@@ -1,0 +1,1441 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Freelance Ledger</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,400..800&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: a stage rail (brief → paid) as the home screen, a project sheet sliding in from the right,
+   and three ledgers (week, money, clients). Figures always set in mono so euros and hours line up. */
+:root {
+  --bg: #F2F3F0;
+  --surface: #FFFFFF;
+  --surface-2: #E9ECE6;
+  --ink: #171A18;
+  --muted: #5F6762;
+  --line: #D8DCD5;
+  --accent: #2C43C9;
+  --accent-ink: #FFFFFF;
+  --accent-soft: #E3E7FB;
+  --good: #1D7F47;
+  --warn: #9A6410;
+  --bad: #B83A25;
+  --shadow: 0 1px 2px rgba(20, 24, 22, .06), 0 6px 24px rgba(20, 24, 22, .08);
+
+  --font-display: "Archivo", "Helvetica Neue", Arial, sans-serif;
+  --font-body: "Archivo", "Helvetica Neue", Arial, sans-serif;
+  --font-figure: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+
+  --r: 6px;
+  --gutter: clamp(16px, 3vw, 28px);
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #111312; --surface: #191C1A; --surface-2: #222623; --ink: #E8EBE7; --muted: #9AA19C;
+    --line: #2D322E; --accent: #8E9CFF; --accent-ink: #0D1233; --accent-soft: #23294A;
+    --good: #52C383; --warn: #E2AA4F; --bad: #F0816B;
+    --shadow: 0 1px 2px rgba(0,0,0,.4), 0 8px 28px rgba(0,0,0,.45);
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #111312; --surface: #191C1A; --surface-2: #222623; --ink: #E8EBE7; --muted: #9AA19C;
+  --line: #2D322E; --accent: #8E9CFF; --accent-ink: #0D1233; --accent-soft: #23294A;
+  --good: #52C383; --warn: #E2AA4F; --bad: #F0816B;
+  --shadow: 0 1px 2px rgba(0,0,0,.4), 0 8px 28px rgba(0,0,0,.45);
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+html, body { height: 100%; }
+body {
+  margin: 0; background: var(--bg); color: var(--ink);
+  font: 400 14px/1.45 var(--font-body);
+  -webkit-font-smoothing: antialiased;
+}
+[hidden] { display: none !important; }
+button, input, select, textarea { font: inherit; color: inherit; }
+.fig, .num { font-family: var(--font-figure); font-variant-numeric: tabular-nums; letter-spacing: -.01em; }
+h1, h2, h3 { font-family: var(--font-display); font-stretch: 115%; margin: 0; text-wrap: balance; line-height: 1.15; }
+h2 { font-size: 22px; font-weight: 700; }
+h3 { font-size: 15px; font-weight: 700; }
+.label { font-size: 11px; font-weight: 600; letter-spacing: .07em; text-transform: uppercase; color: var(--muted); }
+.muted { color: var(--muted); }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
+
+/* ---------- controls ---------- */
+.btn {
+  display: inline-flex; align-items: center; gap: 6px; height: 34px; padding: 0 12px;
+  border: 1px solid var(--line); background: var(--surface); border-radius: var(--r);
+  font-weight: 600; cursor: pointer; white-space: nowrap;
+}
+.btn:hover { border-color: var(--muted); }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+.btn.primary:hover { filter: brightness(1.08); }
+.btn.ghost { background: transparent; border-color: transparent; }
+.btn.ghost:hover { background: var(--surface-2); }
+.btn.danger { color: var(--bad); }
+.btn.danger.confirm { background: var(--bad); color: var(--surface); border-color: var(--bad); }
+.btn.sm { height: 28px; padding: 0 9px; font-size: 13px; }
+.btn[disabled] { opacity: .5; cursor: default; }
+.icon-btn { width: 30px; height: 30px; display: inline-grid; place-items: center; border: 0; background: transparent; border-radius: var(--r); cursor: pointer; color: var(--muted); }
+.icon-btn:hover { background: var(--surface-2); color: var(--ink); }
+
+.field { display: grid; gap: 4px; min-width: 0; }
+.field > span { font-size: 12px; font-weight: 600; color: var(--muted); }
+.input, select.input, textarea.input {
+  width: 100%; height: 34px; padding: 0 10px; border: 1px solid var(--line); border-radius: var(--r);
+  background: var(--surface); min-width: 0;
+}
+textarea.input { height: auto; min-height: 72px; padding: 8px 10px; resize: vertical; }
+.input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+.input.bare { border-color: transparent; background: transparent; }
+.input.bare:hover { border-color: var(--line); }
+.input.bare:focus { background: var(--surface); }
+.check { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; cursor: pointer; }
+.grid2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.grid3 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+@media (max-width: 560px) { .grid2, .grid3 { grid-template-columns: 1fr; } }
+
+/* ---------- chips & pills ---------- */
+.chip {
+  display: inline-flex; align-items: center; gap: 6px; max-width: 100%;
+  font-size: 12px; font-weight: 600; padding: 2px 8px 2px 6px; border-radius: 99px;
+  background: color-mix(in srgb, var(--c, var(--muted)) 16%, var(--surface));
+  color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.chip::before { content: ""; width: 8px; height: 8px; border-radius: 2px; background: var(--c, var(--muted)); flex: none; }
+.tag { font-size: 11.5px; color: var(--muted); }
+.tag::before { content: "#"; opacity: .6; }
+.tags { display: flex; flex-wrap: wrap; gap: 4px 8px; }
+.pill {
+  display: inline-flex; align-items: center; gap: 5px; height: 22px; padding: 0 8px; border-radius: 99px;
+  font-size: 11.5px; font-weight: 600; border: 1px solid var(--line); background: var(--surface); white-space: nowrap; cursor: default;
+}
+button.pill { cursor: pointer; }
+.pill::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor; opacity: .8; }
+.pill.todo { color: var(--muted); }
+.pill.doing { color: var(--accent); border-color: color-mix(in srgb, var(--accent) 40%, var(--line)); }
+.pill.waiting { color: var(--warn); border-color: color-mix(in srgb, var(--warn) 40%, var(--line)); }
+.pill.done { color: var(--good); border-color: color-mix(in srgb, var(--good) 40%, var(--line)); }
+.pill.expected { color: var(--muted); }
+.pill.invoiced { color: var(--warn); border-color: color-mix(in srgb, var(--warn) 40%, var(--line)); }
+.pill.received { color: var(--good); border-color: color-mix(in srgb, var(--good) 40%, var(--line)); }
+.pill.overdue { color: var(--bad); border-color: color-mix(in srgb, var(--bad) 45%, var(--line)); }
+.pill.example { color: var(--accent); background: var(--accent-soft); border-color: transparent; }
+.pill.example::before { display: none; }
+
+/* ---------- shell ---------- */
+.topbar {
+  position: sticky; top: env(safe-area-inset-top, 0px); z-index: 20;
+  display: flex; align-items: center; gap: 16px; flex-wrap: wrap;
+  padding: 10px var(--gutter); background: color-mix(in srgb, var(--bg) 88%, transparent);
+  backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); border-bottom: 1px solid var(--line);
+}
+.brand { display: flex; align-items: baseline; gap: 8px; }
+.brand h1 { font-size: 17px; font-weight: 800; font-stretch: 125%; letter-spacing: -.01em; }
+.brand .sync { font-size: 11px; color: var(--muted); display: inline-flex; align-items: center; gap: 5px; }
+.brand .sync::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: var(--good); }
+.brand .sync.saving::before { background: var(--warn); }
+.brand .sync.error::before { background: var(--bad); }
+.tabs { display: flex; gap: 2px; background: var(--surface-2); padding: 3px; border-radius: 8px; }
+.tabs button {
+  border: 0; background: transparent; padding: 5px 12px; border-radius: 6px; font-weight: 600; cursor: pointer; color: var(--muted);
+}
+.tabs button[aria-current="page"] { background: var(--surface); color: var(--ink); box-shadow: 0 1px 2px rgba(0,0,0,.08); }
+.topbar .spacer { flex: 1; }
+.topbar .actions { display: flex; gap: 8px; align-items: center; }
+@media (max-width: 760px) {
+  .topbar { gap: 10px; }
+  .tabs { order: 3; width: 100%; overflow-x: auto; }
+  .tabs button { flex: 1; }
+  .topbar .spacer { display: none; }
+  .topbar .actions { margin-left: auto; }
+  .hide-sm { display: none; }
+}
+main { padding: 20px var(--gutter) 48px; }
+.view-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 16px; }
+.view-head .sub { margin-top: 4px; color: var(--muted); }
+
+.banner {
+  display: flex; align-items: center; gap: 12px; flex-wrap: wrap; padding: 10px 14px; margin-bottom: 16px;
+  border-radius: var(--r); background: var(--accent-soft); color: var(--ink); font-size: 13px;
+}
+.banner .spacer { flex: 1; }
+
+/* ---------- board ---------- */
+.filters { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.filters .input { width: auto; min-width: 140px; }
+.filters .search { min-width: 180px; }
+.rail-wrap { overflow-x: auto; margin: 0 calc(-1 * var(--gutter)); padding: 0 var(--gutter) 12px; }
+.rail { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(232px, 1fr); gap: 10px; min-width: min-content; }
+.col { display: flex; flex-direction: column; gap: 8px; min-height: 240px; padding: 8px; border-radius: 8px; background: var(--surface-2); }
+.col.drop { outline: 2px dashed var(--accent); outline-offset: -2px; }
+.col-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; padding: 4px 4px 2px; }
+.col-head .stage-no { font-family: var(--font-figure); font-size: 11px; color: var(--muted); margin-right: 6px; }
+.col-head h3 { font-size: 13px; font-stretch: 110%; }
+.col-head .sum { font-size: 11.5px; color: var(--muted); }
+@media (max-width: 560px) {
+  .rail { grid-auto-columns: 80vw; }
+  .rail-wrap { scroll-snap-type: x mandatory; }
+  .col { scroll-snap-align: center; }
+}
+.col-empty { font-size: 12px; color: var(--muted); padding: 12px 6px; text-align: center; border: 1px dashed var(--line); border-radius: var(--r); }
+
+.card {
+  position: relative; display: grid; gap: 8px; padding: 11px 12px 10px; border-radius: var(--r);
+  background: var(--surface); border: 1px solid var(--line); cursor: pointer; text-align: left; width: 100%;
+  transition: border-color .15s, box-shadow .15s, transform .15s;
+}
+.card:hover { border-color: color-mix(in srgb, var(--c, var(--muted)) 60%, var(--line)); box-shadow: var(--shadow); }
+.card.dragging { opacity: .45; }
+.card.hold { opacity: .62; }
+.card-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-width: 0; }
+.card-name { font-weight: 650; font-size: 14.5px; line-height: 1.3; overflow-wrap: anywhere; }
+.card-meta { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 12px; color: var(--muted); }
+.card .due { font-size: 11.5px; color: var(--muted); white-space: nowrap; }
+.card .due.late { color: var(--bad); font-weight: 600; }
+.meter { height: 4px; border-radius: 2px; background: var(--surface-2); overflow: hidden; display: flex; gap: 2px; }
+.meter i { display: block; height: 100%; }
+.meter .rec { background: var(--good); }
+.meter .inv { background: var(--warn); }
+.card .advance {
+  position: absolute; right: 6px; bottom: 6px; opacity: 0; transition: opacity .15s;
+  width: 26px; height: 26px; border-radius: 6px; border: 1px solid var(--line); background: var(--surface); cursor: pointer; color: var(--muted);
+}
+.card:hover .advance, .card:focus-within .advance { opacity: 1; }
+@media (hover: none) { .card .advance { opacity: 1; } }
+
+/* ---------- empty / login ---------- */
+.empty { max-width: 560px; margin: 8vh auto; text-align: left; display: grid; gap: 14px; }
+.empty h2 { font-size: 30px; font-stretch: 125%; font-weight: 800; letter-spacing: -.015em; }
+.empty p { margin: 0; color: var(--muted); max-width: 52ch; }
+.empty .row { display: flex; gap: 8px; flex-wrap: wrap; }
+.login { min-height: 100%; display: grid; place-items: center; padding: 24px 16px; }
+.login-box { width: min(420px, 100%); display: grid; gap: 16px; }
+.login-box h1 { font-size: 34px; font-weight: 800; font-stretch: 125%; letter-spacing: -.02em; }
+.login-box .rail-mini { display: flex; gap: 4px; flex-wrap: wrap; }
+.login-box .rail-mini span { font-size: 11px; font-weight: 600; padding: 3px 7px; border-radius: 4px; background: var(--surface-2); color: var(--muted); }
+.login-box .rail-mini span:last-child { background: var(--good); color: var(--surface); }
+.login-box form { display: grid; gap: 10px; }
+.note { font-size: 12.5px; color: var(--muted); }
+.error-text { color: var(--bad); font-size: 13px; }
+
+/* ---------- sheet (project detail) ---------- */
+.scrim { position: fixed; inset: 0; background: rgba(10, 12, 11, .35); z-index: 40; animation: fade .15s; }
+.sheet {
+  position: fixed; top: 0; right: 0; bottom: 0; z-index: 41; width: min(760px, 100%);
+  background: var(--bg); border-left: 1px solid var(--line); box-shadow: var(--shadow);
+  display: flex; flex-direction: column; animation: slide .2s ease-out;
+  padding-top: env(safe-area-inset-top, 0px); padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+@keyframes slide { from { transform: translateX(24px); opacity: .6; } }
+@keyframes fade { from { opacity: 0; } }
+.sheet-head { padding: 14px var(--gutter) 12px; border-bottom: 1px solid var(--line); background: var(--surface); display: grid; gap: 10px; }
+.sheet-title { display: flex; align-items: center; gap: 8px; }
+.sheet-title input { font-family: var(--font-display); font-stretch: 112%; font-size: 21px; font-weight: 700; height: 40px; flex: 1; }
+.sheet-body { flex: 1; overflow-y: auto; padding: 16px var(--gutter) 40px; display: grid; gap: 18px; align-content: start; }
+
+.stepper { display: flex; gap: 3px; overflow-x: auto; padding-bottom: 2px; }
+.step {
+  flex: 1 0 auto; min-width: 74px; border: 0; background: var(--surface-2); color: var(--muted);
+  padding: 7px 8px 6px; border-radius: 4px; text-align: left; cursor: pointer; display: grid; gap: 1px;
+}
+.step b { font-size: 12px; font-weight: 650; }
+.step small { font-family: var(--font-figure); font-size: 10px; opacity: .8; }
+.step.past { background: color-mix(in srgb, var(--accent) 22%, var(--surface)); color: var(--ink); }
+.step.current { background: var(--accent); color: var(--accent-ink); }
+.step.skipped { background: transparent; border: 1px dashed var(--line); text-decoration: line-through; opacity: .7; }
+.stepper.editing .step { outline: 1px dashed var(--muted); outline-offset: -3px; }
+.stepper-foot { display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 12px; }
+
+.figures { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 1px; background: var(--line); border: 1px solid var(--line); border-radius: var(--r); overflow: hidden; }
+.figures > div { background: var(--surface); padding: 10px 12px; display: grid; gap: 2px; min-width: 0; }
+.figures .v { font-family: var(--font-figure); font-size: 16px; font-weight: 500; font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.figures .v.good { color: var(--good); }
+.figures .v.warn { color: var(--warn); }
+@media (max-width: 620px) { .figures { grid-template-columns: repeat(2, minmax(0, 1fr)); } .figures > div:last-child { grid-column: span 2; } }
+
+.subtabs { display: flex; gap: 16px; border-bottom: 1px solid var(--line); overflow-x: auto; }
+.subtabs button { border: 0; background: none; padding: 8px 0; font-weight: 650; color: var(--muted); cursor: pointer; border-bottom: 2px solid transparent; margin-bottom: -1px; white-space: nowrap; }
+.subtabs button[aria-current="true"] { color: var(--ink); border-color: var(--ink); }
+.subtabs .count { font-family: var(--font-figure); font-size: 11px; font-weight: 400; margin-left: 4px; }
+
+.panel { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); }
+.addrow { display: flex; gap: 8px; flex-wrap: wrap; align-items: end; padding: 12px; border-bottom: 1px solid var(--line); }
+.addrow .grow { flex: 1 1 200px; }
+.addrow .w-sm { flex: 0 1 110px; }
+.addrow .w-md { flex: 0 1 150px; }
+.list { display: grid; }
+.row-item { display: flex; align-items: center; gap: 10px; padding: 6px 12px; border-bottom: 1px solid var(--line); min-width: 0; }
+.row-item:last-child { border-bottom: 0; }
+.row-item .grow { flex: 1; min-width: 0; }
+.row-item .side { font-size: 12px; color: var(--muted); white-space: nowrap; }
+.row-item.done .input { text-decoration: line-through; color: var(--muted); }
+.list-empty { padding: 18px 12px; color: var(--muted); font-size: 13px; }
+.suggest { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; padding: 10px 12px; background: var(--surface-2); font-size: 13px; border-bottom: 1px solid var(--line); }
+
+/* ---------- tables ---------- */
+.table-wrap { overflow-x: auto; background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); }
+table { width: 100%; border-collapse: collapse; font-size: 13px; }
+th, td { padding: 8px 10px; border-bottom: 1px solid var(--line); text-align: left; white-space: nowrap; }
+th { font-size: 11px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); background: var(--surface); position: sticky; top: 0; }
+td.n, th.n { text-align: right; font-family: var(--font-figure); font-variant-numeric: tabular-nums; }
+tr:last-child td { border-bottom: 0; }
+tbody tr.link { cursor: pointer; }
+tbody tr.link:hover td { background: var(--surface-2); }
+tfoot td { font-weight: 600; background: var(--surface-2); border-bottom: 0; }
+
+/* timesheet */
+.week-nav { display: flex; align-items: center; gap: 6px; }
+.week-nav .range { font-family: var(--font-figure); font-size: 13px; min-width: 150px; text-align: center; }
+.ts td.cell { padding: 3px; width: 72px; }
+.ts td.cell input {
+  width: 64px; height: 32px; text-align: right; padding: 0 8px; border: 1px solid transparent; border-radius: 4px;
+  background: var(--surface-2); font-family: var(--font-figure); font-variant-numeric: tabular-nums;
+}
+.ts td.cell input:hover { border-color: var(--line); }
+.ts td.cell input:focus { outline: none; border-color: var(--accent); background: var(--surface); }
+.ts td.cell input:disabled { background: transparent; color: var(--muted); }
+.ts th.today, .ts td.today { background: color-mix(in srgb, var(--accent) 7%, var(--surface)); }
+.ts td.proj { max-width: 260px; overflow: hidden; text-overflow: ellipsis; }
+.ts .proj-name { font-weight: 600; }
+
+/* money */
+.stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 10px; margin-bottom: 18px; }
+.stat { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); padding: 12px 14px; display: grid; gap: 4px; }
+.stat .v { font-family: var(--font-figure); font-size: 22px; font-weight: 500; font-variant-numeric: tabular-nums; letter-spacing: -.02em; }
+.stat .d { font-size: 12px; color: var(--muted); }
+.stat.alert .v { color: var(--bad); }
+.chart-box { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); padding: 14px 14px 8px; margin-bottom: 18px; }
+.bars { display: grid; grid-template-columns: auto 1fr; grid-template-rows: 180px auto; column-gap: 10px; margin-top: 12px; }
+.bars-y { display: flex; flex-direction: column; justify-content: space-between; align-items: flex-end; font: 10.5px var(--font-figure); color: var(--muted); margin: -6px 0; }
+.bars-plot { position: relative; display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; align-items: end; border-bottom: 1px solid var(--muted); }
+.bars-plot .gl { position: absolute; left: 0; right: 0; height: 0; border-top: 1px solid var(--line); }
+.bars-col { position: relative; height: 100%; display: flex; align-items: flex-end; justify-content: center; }
+.bars-col b { display: block; width: 62%; max-width: 44px; background: var(--accent); border-radius: 4px 4px 0 0; position: relative; }
+.bars-col b.now { background: var(--good); }
+.bars-col:hover b { filter: brightness(1.15); }
+.bars-col:hover { background: color-mix(in srgb, var(--accent) 5%, transparent); }
+.bars-x { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; text-align: center; font: 10.5px var(--font-figure); color: var(--muted); padding-top: 6px; }
+.chart-tip { position: fixed; z-index: 60; pointer-events: none; background: var(--ink); color: var(--bg); padding: 6px 9px; border-radius: 5px; font: 12px var(--font-figure); }
+.seg { display: flex; gap: 2px; background: var(--surface-2); padding: 3px; border-radius: 8px; }
+.seg button { border: 0; background: transparent; padding: 4px 10px; border-radius: 6px; font-size: 13px; font-weight: 600; cursor: pointer; color: var(--muted); }
+.seg button[aria-pressed="true"] { background: var(--surface); color: var(--ink); }
+
+/* clients */
+.client-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px; }
+.client { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); padding: 14px; display: grid; gap: 12px; }
+.client-head { display: flex; align-items: center; gap: 10px; }
+.client-head .input { font-weight: 700; font-size: 15px; }
+.swatch-btn { width: 34px; height: 34px; border-radius: var(--r); border: 0; background: var(--c); cursor: pointer; flex: none; box-shadow: inset 0 0 0 1px rgba(0,0,0,.12); }
+.swatches { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.swatches button { width: 22px; height: 22px; border-radius: 5px; border: 0; background: var(--c); cursor: pointer; box-shadow: inset 0 0 0 1px rgba(0,0,0,.12); }
+.swatches button[aria-pressed="true"] { outline: 2px solid var(--ink); outline-offset: 2px; }
+.swatches input[type="color"] { width: 26px; height: 26px; padding: 0; border: 0; background: none; cursor: pointer; }
+.client-stats { display: flex; gap: 16px; font-size: 12px; color: var(--muted); flex-wrap: wrap; }
+.client-stats b { font-family: var(--font-figure); font-weight: 500; color: var(--ink); }
+
+/* modal */
+.modal {
+  position: fixed; z-index: 51; left: 50%; top: 50%; transform: translate(-50%, -50%);
+  width: min(560px, calc(100% - 32px)); max-height: calc(100% - 48px); overflow-y: auto;
+  background: var(--surface); border-radius: 10px; box-shadow: var(--shadow); border: 1px solid var(--line);
+  display: grid; gap: 14px; padding: 20px; animation: fade .15s;
+}
+.modal .foot { display: flex; justify-content: flex-end; gap: 8px; }
+.modal .presets { display: flex; gap: 6px; flex-wrap: wrap; }
+.stage-checks { display: flex; flex-wrap: wrap; gap: 6px 14px; }
+.scrim.modal-scrim { z-index: 50; }
+
+#toast { position: fixed; left: 50%; bottom: calc(18px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); z-index: 70; display: grid; gap: 6px; }
+#toast div { background: var(--ink); color: var(--bg); padding: 9px 14px; border-radius: 6px; font-size: 13px; box-shadow: var(--shadow); animation: fade .15s; max-width: min(520px, calc(100vw - 32px)); }
+#toast div.bad { background: var(--bad); color: #fff; }
+</style>
+</head>
+<body>
+<div id="app"></div>
+<div id="layer"></div>
+<div id="toast" role="status" aria-live="polite"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
+<script>
+/* ===================== config ===================== */
+const SUPABASE_URL = "https://llfvnwoaysmqvpeguapw.supabase.co";
+const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxsZnZud29heXNtcXZwZWd1YXB3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTE0MTI1NTUsImV4cCI6MjEwNjk4ODU1NX0.sXhXloIcQalxws_glj1YUMNp1ZcoenOuUYU3L9uEzFc";
+
+const STAGES = [
+  { key: "brief",      label: "Brief" },
+  { key: "pitch",      label: "Pitch" },
+  { key: "approved",   label: "Approved" },
+  { key: "production", label: "Production" },
+  { key: "review",     label: "Review" },
+  { key: "delivered",  label: "Delivered" },
+  { key: "invoiced",   label: "Invoiced" },
+  { key: "paid",       label: "Paid" },
+];
+const STAGE_IDX = Object.fromEntries(STAGES.map((s, i) => [s.key, i]));
+const PRESETS = [
+  { name: "Full job", skip: [] },
+  { name: "Pitch only", skip: ["production", "review", "delivered"] },
+  { name: "Straight to production", skip: ["pitch", "approved"] },
+];
+const TASK_STATUS = ["todo", "doing", "waiting", "done"];
+const TASK_LABEL = { todo: "To do", doing: "Doing", waiting: "Waiting on client", done: "Done" };
+const PAY_STATUS = ["expected", "invoiced", "received"];
+const PAY_LABEL = { expected: "Expected", invoiced: "Invoiced", received: "Received" };
+const BILLING = { hourly: "Hourly", fixed: "Fixed fee", fixed_plus: "Fixed + extra hours" };
+const PROJECT_STATUS = { active: "Active", on_hold: "On hold", archived: "Archived", cancelled: "Cancelled" };
+const COLORS = ["#C2412D", "#D97B1F", "#C9A227", "#5E9C3A", "#2F7D6D", "#2C8FB8", "#2C43C9", "#7A4CC2", "#B8438F", "#6B6F6C"];
+
+/* ===================== helpers ===================== */
+const $ = (s, r = document) => r.querySelector(s);
+const esc = (v) => String(v ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const num = (v) => { const n = Number(v); return Number.isFinite(n) ? n : 0; };
+const eurFmt = new Intl.NumberFormat("en-IE", { style: "currency", currency: "EUR", minimumFractionDigits: 0, maximumFractionDigits: 2 });
+const eur = (v) => eurFmt.format(Math.round(num(v) * 100) / 100);
+const hrs = (v) => { const n = Math.round(num(v) * 100) / 100; return (Number.isInteger(n) ? n : n.toFixed(2).replace(/0$/, "")) + "h"; };
+const pad = (n) => String(n).padStart(2, "0");
+const iso = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+const today = () => iso(new Date());
+const parseDate = (s) => { const [y, m, d] = s.split("-").map(Number); return new Date(y, m - 1, d); };
+const addDays = (s, n) => { const d = parseDate(s); d.setDate(d.getDate() + n); return iso(d); };
+const mondayOf = (s) => { const d = parseDate(s); const wd = (d.getDay() + 6) % 7; d.setDate(d.getDate() - wd); return iso(d); };
+const fmtDate = (s, opts = { day: "numeric", month: "short" }) => s ? parseDate(s).toLocaleDateString("en-GB", opts) : "";
+const fmtDateY = (s) => fmtDate(s, { day: "numeric", month: "short", year: "numeric" });
+const parseTags = (s) => [...new Set(String(s || "").split(/[,\s]+/).map((t) => t.replace(/^#/, "").trim().toLowerCase()).filter(Boolean))];
+const cv = (col) => `--c:${col ? esc(col) : "var(--muted)"}`;
+const orNull = (v) => (v === "" || v === undefined ? null : v);
+const numOrNull = (v) => (v === "" || v === null || v === undefined ? null : Number(String(v).replace(",", ".")));
+const store = {
+  get(k, d) { try { const v = localStorage.getItem("fl." + k); return v == null ? d : JSON.parse(v); } catch { return d; } },
+  set(k, v) { try { localStorage.setItem("fl." + k, JSON.stringify(v)); } catch {} },
+};
+
+function toast(msg, kind = "") {
+  const el = document.createElement("div");
+  el.className = kind; el.textContent = msg;
+  $("#toast").appendChild(el);
+  setTimeout(() => el.remove(), kind === "bad" ? 6000 : 2600);
+}
+
+/* ===================== state ===================== */
+const S = {
+  user: null,
+  loaded: false,
+  clients: [], projects: [], tasks: [], time_entries: [], payments: [],
+  view: store.get("view", "board"),
+  filter: store.get("filter", { client: "", tag: "", q: "", closed: false }),
+  week: mondayOf(today()),
+  open: null,          // open project id
+  sub: store.get("sub", "tasks"),
+  editSteps: false,
+  moneyFilter: "open",
+  sync: "ok",
+};
+
+/* ===================== supabase ===================== */
+const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+  auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true },
+});
+const TABLES = ["clients", "projects", "tasks", "time_entries", "payments"];
+
+function setSync(s) {
+  S.sync = s;
+  const el = $(".brand .sync");
+  if (el) { el.className = "sync " + s; el.textContent = s === "saving" ? "Saving…" : s === "error" ? "Not saved" : "Saved"; }
+}
+
+async function loadAll() {
+  setSync("saving");
+  const res = await Promise.all(TABLES.map((t) => sb.from(t).select("*")));
+  const err = res.find((r) => r.error);
+  if (err) { setSync("error"); toast("Couldn't load your data: " + err.error.message, "bad"); return; }
+  TABLES.forEach((t, i) => (S[t] = res[i].data || []));
+  S.loaded = true;
+  setSync("ok");
+  render();
+}
+
+function upsertLocal(table, row) {
+  const arr = S[table];
+  const i = arr.findIndex((r) => r.id === row.id);
+  if (i >= 0) arr[i] = row; else arr.push(row);
+}
+
+async function save(table, rec, { quiet = false } = {}) {
+  setSync("saving");
+  let q;
+  if (rec.id) {
+    const { id, ...rest } = rec;
+    q = sb.from(table).update(rest).eq("id", id).select().single();
+  } else {
+    q = sb.from(table).insert(rec).select().single();
+  }
+  const { data, error } = await q;
+  if (error) {
+    setSync("error");
+    toast("Not saved: " + error.message, "bad");
+    throw error;
+  }
+  upsertLocal(table, data);
+  setSync("ok");
+  if (!quiet) render();
+  return data;
+}
+
+async function remove(table, id, { quiet = false } = {}) {
+  setSync("saving");
+  const { error } = await sb.from(table).delete().eq("id", id);
+  if (error) { setSync("error"); toast("Not deleted: " + error.message, "bad"); throw error; }
+  S[table] = S[table].filter((r) => r.id !== id);
+  if (table === "projects") {
+    S.tasks = S.tasks.filter((r) => r.project_id !== id);
+    S.time_entries = S.time_entries.filter((r) => r.project_id !== id);
+    S.payments = S.payments.filter((r) => r.project_id !== id);
+  }
+  if (table === "clients") S.projects.forEach((p) => { if (p.client_id === id) p.client_id = null; });
+  if (table === "tasks") S.time_entries.forEach((e) => { if (e.task_id === id) e.task_id = null; });
+  setSync("ok");
+  if (!quiet) render();
+}
+
+/* ===================== derived numbers ===================== */
+const clientOf = (p) => S.clients.find((c) => c.id === p?.client_id) || null;
+const projectOf = (id) => S.projects.find((p) => p.id === id) || null;
+const rateOf = (p) => num(p.rate ?? clientOf(p)?.default_rate ?? 0);
+function hoursOf(pid) {
+  let total = 0, billable = 0;
+  for (const e of S.time_entries) if (e.project_id === pid) { total += num(e.hours); if (e.billable) billable += num(e.hours); }
+  return { total, billable };
+}
+function valueOf(p) {
+  const h = hoursOf(p.id), r = rateOf(p);
+  if (p.billing_mode === "fixed") return num(p.fixed_fee);
+  if (p.billing_mode === "fixed_plus") return num(p.fixed_fee) + Math.max(0, h.billable - num(p.included_hours)) * r;
+  return h.billable * r;
+}
+function moneyOf(p) {
+  const pays = S.payments.filter((y) => y.project_id === p.id);
+  const sum = (st) => pays.filter((y) => y.status === st).reduce((a, y) => a + num(y.amount), 0);
+  const value = valueOf(p);
+  const received = sum("received"), invoiced = sum("invoiced"), expected = sum("expected");
+  const scheduled = received + invoiced + expected;
+  const h = hoursOf(p.id);
+  return {
+    value, received, invoiced, expected, scheduled,
+    unscheduled: Math.max(0, value - scheduled),
+    outstanding: Math.max(0, value - received),
+    hours: h.total, billable: h.billable,
+    effective: h.total > 0 ? Math.max(value, received) / h.total : null,
+  };
+}
+const isLate = (d) => d && d < today();
+const nextStage = (p, dir = 1) => {
+  let i = STAGE_IDX[p.stage] + dir;
+  while (i >= 0 && i < STAGES.length && (p.skipped_stages || []).includes(STAGES[i].key)) i += dir;
+  return STAGES[i]?.key || null;
+};
+const allTags = () => [...new Set(S.projects.flatMap((p) => p.tags || []).concat(S.tasks.flatMap((t) => t.tags || [])))].sort();
+
+/* ===================== rendering ===================== */
+function keepFocus(fn) {
+  const a = document.activeElement;
+  const id = a && a.id;
+  const snap = id && "value" in a ? { v: a.value, s: a.selectionStart, e: a.selectionEnd } : null;
+  fn();
+  if (id) {
+    const b = document.getElementById(id);
+    if (b) {
+      if (snap && "value" in b && b.type !== "checkbox" && b.tagName !== "SELECT") {
+        b.value = snap.v;
+        try { b.setSelectionRange(snap.s, snap.e); } catch {}
+      }
+      b.focus({ preventScroll: true });
+    }
+  }
+}
+
+function render() {
+  keepFocus(() => {
+    const app = $("#app");
+    if (!S.user) { app.innerHTML = loginView(); return; }
+    const body = !S.loaded ? `<main><p class="muted">Loading your projects…</p></main>`
+      : S.view === "week" ? weekView()
+      : S.view === "money" ? moneyView()
+      : S.view === "clients" ? clientsView()
+      : boardView();
+    app.innerHTML = topbar() + body;
+    renderSheet();
+  });
+}
+
+function topbar() {
+  const tab = (k, l) => `<button data-act="view" data-v="${k}" ${S.view === k ? 'aria-current="page"' : ""}>${l}</button>`;
+  const syncLabel = S.sync === "saving" ? "Saving…" : S.sync === "error" ? "Not saved" : "Saved";
+  return `<header class="topbar">
+    <div class="brand"><h1>Freelance Ledger</h1><span class="sync ${S.sync}">${syncLabel}</span></div>
+    <nav class="tabs" aria-label="Views">${tab("board", "Projects")}${tab("week", "Timesheet")}${tab("money", "Money")}${tab("clients", "Clients")}</nav>
+    <div class="spacer"></div>
+    <div class="actions">
+      <button class="btn" data-act="log-time">Log time</button>
+      <button class="btn primary" data-act="new-project">New project</button>
+      <button class="icon-btn" data-act="sign-out" title="Sign out (${esc(S.user.email)})" aria-label="Sign out">
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M6 3H3v10h3M10 5l3 3-3 3M13 8H6"/></svg>
+      </button>
+    </div>
+  </header>`;
+}
+
+function loginView() {
+  const sent = S.loginSent;
+  return `<div class="login"><div class="login-box">
+    <div class="rail-mini">${STAGES.map((s) => `<span>${s.label}</span>`).join("")}</div>
+    <h1>Freelance Ledger</h1>
+    <p class="muted" style="margin:0">Projects from brief to paid, hours by the day, and every part payment accounted for.</p>
+    ${sent ? `<div class="panel" style="padding:14px"><b>Check your inbox.</b><p class="note" style="margin:6px 0 0">We sent a sign-in link to ${esc(sent)}. Open it on this device and you'll land back here, signed in.</p></div>
+      <button class="btn ghost" data-act="login-again">Use a different email</button>`
+    : `<form id="login-form">
+      <label class="field"><span>Email</span><input class="input" id="login-email" name="email" type="email" required autocomplete="email" placeholder="you@studio.com"></label>
+      <button class="btn primary" type="submit" style="justify-content:center">Email me a sign-in link</button>
+      ${S.loginError ? `<p class="error-text" style="margin:0">${esc(S.loginError)}</p>` : ""}
+      <p class="note" style="margin:0">The first account to sign in becomes the owner. After that, sign-ups are closed.</p>
+    </form>`}
+  </div></div>`;
+}
+
+/* ----- board ----- */
+function filteredProjects() {
+  const f = S.filter, q = f.q.trim().toLowerCase();
+  return S.projects.filter((p) => {
+    if (!f.closed && (p.status === "archived" || p.status === "cancelled")) return false;
+    if (f.client && p.client_id !== f.client) return false;
+    if (f.tag && !(p.tags || []).includes(f.tag) && !S.tasks.some((t) => t.project_id === p.id && (t.tags || []).includes(f.tag))) return false;
+    if (q) {
+      const hay = [p.name, p.description, clientOf(p)?.name, ...(p.tags || [])].join(" ").toLowerCase();
+      if (!hay.includes(q)) return false;
+    }
+    return true;
+  });
+}
+
+function boardView() {
+  if (!S.projects.length && !S.clients.length) return `<main>${emptyState()}</main>`;
+  const list = filteredProjects();
+  const hasExamples = S.projects.some((p) => p.example) || S.clients.some((c) => c.example);
+  const tags = allTags();
+  const cols = STAGES.map((s, i) => {
+    const items = list.filter((p) => p.stage === s.key)
+      .sort((a, b) => (a.status === "on_hold") - (b.status === "on_hold") || (a.due_date || "9999").localeCompare(b.due_date || "9999"));
+    const total = items.reduce((a, p) => a + moneyOf(p).value, 0);
+    return `<section class="col" data-drop="${s.key}" aria-label="${s.label}">
+      <div class="col-head"><h3><span class="stage-no">${pad(i + 1)}</span>${s.label} <span class="muted fig" style="font-weight:400;font-size:11px">${items.length || ""}</span></h3>
+      <span class="sum fig">${total ? eur(total) : ""}</span></div>
+      ${items.map(card).join("") || `<div class="col-empty">Drop a project here</div>`}
+    </section>`;
+  }).join("");
+  return `<main>
+    ${hasExamples ? `<div class="banner"><span class="pill example">Example</span><span>Example projects are loaded so you can see how things work.</span><span class="spacer"></span><button class="btn sm" data-act="clear-examples">Remove examples</button></div>` : ""}
+    <div class="view-head">
+      <div><h2>Projects</h2><div class="sub">${list.length} project${list.length === 1 ? "" : "s"} on the rail · drag a card to move it, or open it for details</div></div>
+      <div class="filters">
+        <input class="input search" id="f-q" type="search" placeholder="Search projects" value="${esc(S.filter.q)}" data-filter="q">
+        <select class="input" id="f-client" data-filter="client"><option value="">All clients</option>${S.clients.map((c) => `<option value="${c.id}" ${S.filter.client === c.id ? "selected" : ""}>${esc(c.name)}</option>`).join("")}</select>
+        <select class="input" id="f-tag" data-filter="tag"><option value="">All tags</option>${tags.map((t) => `<option value="${esc(t)}" ${S.filter.tag === t ? "selected" : ""}>#${esc(t)}</option>`).join("")}</select>
+        <label class="check"><input type="checkbox" id="f-closed" data-filter="closed" ${S.filter.closed ? "checked" : ""}> Archived</label>
+      </div>
+    </div>
+    <div class="rail-wrap"><div class="rail">${cols}</div></div>
+  </main>`;
+}
+
+function card(p) {
+  const c = clientOf(p), m = moneyOf(p);
+  const tasks = S.tasks.filter((t) => t.project_id === p.id);
+  const done = tasks.filter((t) => t.status === "done").length;
+  const base = Math.max(m.value, m.scheduled, 1);
+  const late = isLate(p.due_date) && p.stage !== "paid";
+  const nxt = nextStage(p);
+  return `<article class="card ${p.status === "on_hold" ? "hold" : ""}" draggable="true" data-card="${p.id}" style="${cv(c?.color)}" tabindex="0" aria-label="${esc(p.name)}">
+    <div class="card-top">
+      ${c ? `<span class="chip" style="${cv(c.color)}">${esc(c.name)}</span>` : `<span class="chip">No client</span>`}
+      ${p.due_date ? `<span class="due ${late ? "late" : ""}">${late ? "Late · " : "Due "}${fmtDate(p.due_date)}</span>` : ""}
+    </div>
+    <div class="card-name">${esc(p.name)}</div>
+    ${(p.tags || []).length || p.example || p.status !== "active" ? `<div class="tags">${p.example ? `<span class="pill example">Example</span>` : ""}${p.status !== "active" ? `<span class="pill">${PROJECT_STATUS[p.status]}</span>` : ""}${(p.tags || []).map((t) => `<span class="tag">${esc(t)}</span>`).join("")}</div>` : ""}
+    <div class="meter" title="Received ${eur(m.received)} · invoiced ${eur(m.invoiced)} of ${eur(m.value)}">
+      <i class="rec" style="width:${(m.received / base) * 100}%"></i><i class="inv" style="width:${(m.invoiced / base) * 100}%"></i>
+    </div>
+    <div class="card-meta">
+      <span class="fig">${eur(m.received)} <span class="muted">/ ${eur(m.value)}</span></span>
+      <span class="fig">${hrs(m.hours)}${tasks.length ? ` · ${done}/${tasks.length}` : ""}</span>
+    </div>
+    ${nxt ? `<button class="advance" data-act="advance" data-id="${p.id}" title="Move to ${STAGES[STAGE_IDX[nxt]].label}" aria-label="Move to ${STAGES[STAGE_IDX[nxt]].label}">→</button>` : ""}
+  </article>`;
+}
+
+function emptyState() {
+  return `<div class="empty">
+    <span class="label">Nothing on the rail yet</span>
+    <h2>Start with a client, then add a project.</h2>
+    <p>Each project moves through the same stages, from brief to paid. Skip the stages a job doesn't need, log hours by the day, and record payments as they come in, in as many parts as you like.</p>
+    <div class="row">
+      <button class="btn primary" data-act="new-project">New project</button>
+      <button class="btn" data-act="new-client">Add a client</button>
+      <button class="btn ghost" data-act="load-examples">Load example data</button>
+    </div>
+    <p class="note">Example data is labelled and can be removed in one click.</p>
+  </div>`;
+}
+
+/* ----- project sheet ----- */
+function renderSheet() {
+  const layer = $("#layer");
+  const p = S.open && projectOf(S.open);
+  const sheetHtml = p ? sheet(p) : "";
+  let sheetEl = $("#sheet-wrap");
+  if (!p) { if (sheetEl) sheetEl.remove(); return; }
+  if (!sheetEl) {
+    sheetEl = document.createElement("div");
+    sheetEl.id = "sheet-wrap";
+    layer.prepend(sheetEl);
+  }
+  const body = sheetEl.querySelector(".sheet-body");
+  const scroll = body ? body.scrollTop : 0;
+  sheetEl.innerHTML = sheetHtml;
+  const nb = sheetEl.querySelector(".sheet-body");
+  if (nb) nb.scrollTop = scroll;
+}
+
+function sheet(p) {
+  const c = clientOf(p), m = moneyOf(p);
+  const skipped = p.skipped_stages || [];
+  const cur = STAGE_IDX[p.stage];
+  const tasks = S.tasks.filter((t) => t.project_id === p.id);
+  const time = S.time_entries.filter((e) => e.project_id === p.id);
+  const pays = S.payments.filter((y) => y.project_id === p.id);
+  const steps = STAGES.map((s, i) => {
+    const sk = skipped.includes(s.key);
+    const cls = sk ? "skipped" : i === cur ? "current" : i < cur ? "past" : "";
+    return `<button class="step ${cls}" data-act="${S.editSteps ? "toggle-skip" : "set-stage"}" data-stage="${s.key}" ${i === cur ? 'aria-current="step"' : ""}><small>${pad(i + 1)}</small><b>${s.label}</b></button>`;
+  }).join("");
+  const sub = (k, l, n) => `<button data-act="sub" data-v="${k}" ${S.sub === k ? 'aria-current="true"' : ""}>${l}${n != null ? `<span class="count">${n}</span>` : ""}</button>`;
+  const rateNote = p.billing_mode === "fixed" ? `Fixed fee` : `${eur(rateOf(p))}/h`;
+  return `<div class="scrim" data-act="close-sheet"></div>
+  <aside class="sheet" role="dialog" aria-label="${esc(p.name)}" data-project="${p.id}">
+    <div class="sheet-head">
+      <div class="sheet-title">
+        <input class="input bare" id="p-name" value="${esc(p.name)}" data-pfield="name" aria-label="Project name">
+        <button class="icon-btn" data-act="close-sheet" aria-label="Close">
+          <svg width="16" height="16" viewBox="0 0 16 16" stroke="currentColor" stroke-width="1.6"><path d="M3 3l10 10M13 3L3 13"/></svg>
+        </button>
+      </div>
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+        ${c ? `<span class="chip" style="${cv(c.color)}">${esc(c.name)}</span>` : `<span class="chip">No client</span>`}
+        <span class="pill">${BILLING[p.billing_mode]} · <span class="fig">${rateNote}</span></span>
+        ${p.status !== "active" ? `<span class="pill">${PROJECT_STATUS[p.status]}</span>` : ""}
+        ${p.example ? `<span class="pill example">Example</span>` : ""}
+        ${p.due_date ? `<span class="muted" style="font-size:12px">Due ${fmtDateY(p.due_date)}</span>` : ""}
+      </div>
+      <div class="stepper ${S.editSteps ? "editing" : ""}" role="list">${steps}</div>
+      <div class="stepper-foot">
+        <span class="muted">${S.editSteps ? "Click a stage to skip it or bring it back." : "Click a stage to move the project there."}</span>
+        <span style="display:flex;gap:6px">
+          ${!S.editSteps && nextStage(p, -1) ? `<button class="btn sm ghost" data-act="advance" data-dir="-1" data-id="${p.id}">← Back</button>` : ""}
+          ${!S.editSteps && nextStage(p) ? `<button class="btn sm" data-act="advance" data-id="${p.id}">Move to ${STAGES[STAGE_IDX[nextStage(p)]].label} →</button>` : ""}
+          <button class="btn sm ghost" data-act="edit-steps">${S.editSteps ? "Done" : "Edit stages"}</button>
+        </span>
+      </div>
+    </div>
+    <div class="sheet-body">
+      <div class="figures">
+        <div><span class="label">Value</span><span class="v">${eur(m.value)}</span></div>
+        <div><span class="label">Received</span><span class="v good">${eur(m.received)}</span></div>
+        <div><span class="label">Invoiced</span><span class="v ${m.invoiced ? "warn" : ""}">${eur(m.invoiced)}</span></div>
+        <div><span class="label">Hours</span><span class="v">${hrs(m.hours)}</span>${m.hours !== m.billable ? `<span class="muted" style="font-size:11.5px">${hrs(m.billable)} billable</span>` : ""}</div>
+        <div><span class="label">Effective rate</span><span class="v">${m.effective == null ? "–" : eur(m.effective) + "/h"}</span></div>
+      </div>
+      <nav class="subtabs">${sub("tasks", "Tasks", tasks.length)}${sub("time", "Time", time.length)}${sub("payments", "Payments", pays.length)}${sub("details", "Details")}</nav>
+      ${S.sub === "time" ? timeTab(p, time, tasks) : S.sub === "payments" ? paymentsTab(p, pays, m) : S.sub === "details" ? detailsTab(p) : tasksTab(p, tasks)}
+    </div>
+  </aside>`;
+}
+
+function tasksTab(p, tasks) {
+  const hoursByTask = {};
+  for (const e of S.time_entries) if (e.task_id) hoursByTask[e.task_id] = (hoursByTask[e.task_id] || 0) + num(e.hours);
+  const rows = tasks.sort((a, b) => (a.status === "done") - (b.status === "done") || a.position - b.position || a.created_at.localeCompare(b.created_at))
+    .map((t) => `<div class="row-item ${t.status === "done" ? "done" : ""}">
+      <button class="pill ${t.status}" data-act="cycle-task" data-id="${t.id}" title="Change status">${TASK_LABEL[t.status]}</button>
+      <div class="grow" style="display:grid;gap:0">
+        <input class="input bare" id="t-name-${t.id}" value="${esc(t.name)}" data-tfield="name" data-id="${t.id}" aria-label="Task name">
+      </div>
+      <input class="input bare" id="t-tags-${t.id}" style="max-width:150px;font-size:12px;color:var(--muted)" value="${esc((t.tags || []).map((x) => "#" + x).join(" "))}" placeholder="#tags" data-tfield="tags" data-id="${t.id}" aria-label="Task tags">
+      <span class="side fig">${hoursByTask[t.id] ? hrs(hoursByTask[t.id]) : ""}</span>
+      <button class="icon-btn" data-act="del-task" data-id="${t.id}" aria-label="Delete task" title="Delete task">×</button>
+    </div>`).join("");
+  return `<div class="panel">
+    <form class="addrow" id="add-task">
+      <label class="field grow"><span>New task</span><input class="input" id="nt-name" name="name" required placeholder="e.g. Moodboard, three concepts"></label>
+      <label class="field w-md"><span>Tags</span><input class="input" id="nt-tags" name="tags" placeholder="#copy #figma"></label>
+      <button class="btn primary" type="submit">Add</button>
+    </form>
+    <div class="list">${rows || `<div class="list-empty">No tasks yet. Add the steps for this job above.</div>`}</div>
+  </div>`;
+}
+
+function timeTab(p, time, tasks) {
+  const rows = time.sort((a, b) => b.date.localeCompare(a.date)).map((e) => {
+    const t = tasks.find((x) => x.id === e.task_id);
+    return `<tr>
+      <td>${fmtDate(e.date, { weekday: "short", day: "numeric", month: "short" })}</td>
+      <td class="n">${hrs(e.hours)}</td>
+      <td>${t ? esc(t.name) : `<span class="muted">–</span>`}</td>
+      <td style="white-space:normal;min-width:140px">${esc(e.note || "")}</td>
+      <td><label class="check"><input type="checkbox" data-act="toggle-billable" data-id="${e.id}" ${e.billable ? "checked" : ""}> Billable</label></td>
+      <td><button class="icon-btn" data-act="del-time" data-id="${e.id}" aria-label="Delete entry">×</button></td>
+    </tr>`;
+  }).join("");
+  return `<div class="panel">
+    <form class="addrow" id="add-time">
+      <label class="field w-md"><span>Date</span><input class="input" type="date" id="nte-date" name="date" value="${today()}" required></label>
+      <label class="field w-sm"><span>Hours</span><input class="input" id="nte-hours" name="hours" inputmode="decimal" placeholder="2.5" required></label>
+      <label class="field w-md"><span>Task</span><select class="input" id="nte-task" name="task_id"><option value="">No task</option>${tasks.filter((t) => t.status !== "done").map((t) => `<option value="${t.id}">${esc(t.name)}</option>`).join("")}</select></label>
+      <label class="field grow"><span>Note</span><input class="input" id="nte-note" name="note" placeholder="What you worked on"></label>
+      <label class="check" style="height:34px"><input type="checkbox" name="billable" checked> Billable</label>
+      <button class="btn primary" type="submit">Log</button>
+    </form>
+    ${rows ? `<div style="overflow-x:auto"><table><tbody>${rows}</tbody></table></div>` : `<div class="list-empty">No hours logged. Add them here or in the Timesheet.</div>`}
+  </div>`;
+}
+
+function paymentsTab(p, pays, m) {
+  const rows = pays.map((y) => {
+    const overdue = y.status === "invoiced" && isLate(y.due_date);
+    return `<div class="row-item" style="flex-wrap:wrap">
+      <select class="pill ${overdue ? "overdue" : y.status}" style="height:24px" id="y-st-${y.id}" data-yfield="status" data-id="${y.id}" aria-label="Payment status">
+        ${PAY_STATUS.map((s) => `<option value="${s}" ${y.status === s ? "selected" : ""}>${PAY_LABEL[s]}</option>`).join("")}
+      </select>
+      <input class="input bare grow" id="y-label-${y.id}" value="${esc(y.label || "")}" placeholder="Label" data-yfield="label" data-id="${y.id}" aria-label="Label" style="flex:1 1 120px">
+      <input class="input bare fig" id="y-amt-${y.id}" style="width:100px;text-align:right" value="${num(y.amount)}" inputmode="decimal" data-yfield="amount" data-id="${y.id}" aria-label="Amount">
+      <input class="input bare" id="y-inv-${y.id}" style="width:96px;font-size:12px" value="${esc(y.invoice_no || "")}" placeholder="Invoice no." data-yfield="invoice_no" data-id="${y.id}" aria-label="Invoice number">
+      <label class="field" style="width:132px"><span style="font-size:10.5px">${y.status === "received" ? "Paid on" : "Due"}</span>
+        <input class="input" style="height:28px" type="date" id="y-date-${y.id}" value="${esc(y.status === "received" ? y.paid_date || "" : y.due_date || "")}" data-yfield="${y.status === "received" ? "paid_date" : "due_date"}" data-id="${y.id}"></label>
+      <button class="icon-btn" data-act="del-pay" data-id="${y.id}" aria-label="Delete payment">×</button>
+    </div>`;
+  }).join("");
+  const sug = m.unscheduled > 0.5
+    ? `<div class="suggest"><span><b class="fig">${eur(m.unscheduled)}</b> of the project value isn't in a payment yet.</span>
+        <button class="btn sm" data-act="schedule" data-parts="1">Add as one payment</button>
+        <button class="btn sm" data-act="schedule" data-parts="2">Split 50 / 50</button>
+        <button class="btn sm" data-act="schedule" data-parts="3">Split in three</button></div>` : "";
+  return `<div class="panel">
+    <form class="addrow" id="add-pay">
+      <label class="field grow"><span>Label</span><input class="input" id="np-label" name="label" placeholder="Deposit, final, part 2…"></label>
+      <label class="field w-sm"><span>Amount €</span><input class="input" id="np-amount" name="amount" inputmode="decimal" required placeholder="600"></label>
+      <label class="field w-md"><span>Status</span><select class="input" id="np-status" name="status">${PAY_STATUS.map((s) => `<option value="${s}">${PAY_LABEL[s]}</option>`).join("")}</select></label>
+      <label class="field w-md"><span>Due date</span><input class="input" type="date" id="np-due" name="due_date"></label>
+      <button class="btn primary" type="submit">Add</button>
+    </form>
+    ${sug}
+    <div class="list">${rows || `<div class="list-empty">No payments yet. Record a deposit, instalments or the final invoice here.</div>`}</div>
+  </div>
+  <p class="note" style="margin:0">Expected is money you've agreed but not invoiced yet. Invoiced is waiting to be paid. Marking a payment received sets today as the paid date.</p>`;
+}
+
+function detailsTab(p) {
+  const c = clientOf(p);
+  return `<form class="panel" id="details" style="padding:14px;display:grid;gap:12px">
+    <div class="grid2">
+      <label class="field"><span>Client</span><select class="input" name="client_id" id="d-client"><option value="">No client</option>${S.clients.map((x) => `<option value="${x.id}" ${p.client_id === x.id ? "selected" : ""}>${esc(x.name)}</option>`).join("")}</select></label>
+      <label class="field"><span>Status</span><select class="input" name="status" id="d-status">${Object.entries(PROJECT_STATUS).map(([k, l]) => `<option value="${k}" ${p.status === k ? "selected" : ""}>${l}</option>`).join("")}</select></label>
+    </div>
+    <div class="grid2">
+      <label class="field"><span>Billing</span><select class="input" name="billing_mode" id="d-billing">${Object.entries(BILLING).map(([k, l]) => `<option value="${k}" ${p.billing_mode === k ? "selected" : ""}>${l}</option>`).join("")}</select></label>
+      <label class="field"><span>Hourly rate €</span><input class="input" name="rate" id="d-rate" inputmode="decimal" value="${p.rate ?? ""}" placeholder="${c?.default_rate != null ? `Client default: ${num(c.default_rate)}` : "e.g. 45"}"></label>
+    </div>
+    <div class="grid2">
+      <label class="field"><span>Fixed fee €</span><input class="input" name="fixed_fee" id="d-fee" inputmode="decimal" value="${p.fixed_fee ?? ""}" placeholder="For fixed-fee jobs"></label>
+      <label class="field"><span>Hours included in fee</span><input class="input" name="included_hours" id="d-inc" inputmode="decimal" value="${p.included_hours ?? ""}" placeholder="Extra hours are billed at the rate"></label>
+    </div>
+    <div class="grid2">
+      <label class="field"><span>Start date</span><input class="input" type="date" name="start_date" id="d-start" value="${p.start_date || ""}"></label>
+      <label class="field"><span>Due date</span><input class="input" type="date" name="due_date" id="d-due" value="${p.due_date || ""}"></label>
+    </div>
+    <label class="field"><span>Tags</span><input class="input" name="tags" id="d-tags" value="${esc((p.tags || []).map((t) => "#" + t).join(" "))}" placeholder="#design #web #content"></label>
+    <label class="field"><span>Brief and notes</span><textarea class="input" name="description" id="d-desc" rows="5">${esc(p.description || "")}</textarea></label>
+    <div style="display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap">
+      <button type="button" class="btn danger" data-act="del-project" data-id="${p.id}">Delete project</button>
+      <button class="btn primary" type="submit">Save details</button>
+    </div>
+  </form>`;
+}
+
+/* ----- timesheet ----- */
+function weekView() {
+  const days = Array.from({ length: 7 }, (_, i) => addDays(S.week, i));
+  const end = days[6];
+  const inWeek = S.time_entries.filter((e) => e.date >= S.week && e.date <= end);
+  const extra = store.get("weekRows", []);
+  const rowIds = new Set([
+    ...S.projects.filter((p) => p.status === "active" && p.stage !== "paid").map((p) => p.id),
+    ...inWeek.map((e) => e.project_id),
+    ...extra.filter((id) => projectOf(id)),
+  ]);
+  const rows = [...rowIds].map(projectOf).filter(Boolean)
+    .sort((a, b) => (clientOf(a)?.name || "").localeCompare(clientOf(b)?.name || "") || a.name.localeCompare(b.name));
+  const t = today();
+  const cellsFor = (p) => days.map((d) => {
+    const es = inWeek.filter((e) => e.project_id === p.id && e.date === d);
+    const sum = es.reduce((a, e) => a + num(e.hours), 0);
+    const multi = es.length > 1;
+    return `<td class="cell ${d === t ? "today" : ""}"><input id="ts-${p.id}-${d}" inputmode="decimal" value="${sum ? +sum.toFixed(2) : ""}" data-ts="${p.id}" data-date="${d}" ${multi ? `disabled title="${es.length} entries this day. Edit them in the project's Time tab."` : ""} aria-label="${esc(p.name)}, ${fmtDate(d)}"></td>`;
+  }).join("");
+  const others = S.projects.filter((p) => !rowIds.has(p.id) && p.status !== "cancelled");
+  const body = rows.map((p) => {
+    const c = clientOf(p);
+    const tot = inWeek.filter((e) => e.project_id === p.id).reduce((a, e) => a + num(e.hours), 0);
+    return `<tr><td class="proj"><button class="btn ghost sm" style="padding:0 4px;max-width:100%" data-act="open" data-id="${p.id}">
+        <span class="chip" style="${cv(c?.color)};margin-right:6px">${esc(c?.name || "No client")}</span><span class="proj-name">${esc(p.name)}</span></button></td>
+      ${cellsFor(p)}<td class="n" data-rowtotal="${p.id}">${tot ? hrs(tot) : ""}</td></tr>`;
+  }).join("");
+  const weekTotal = inWeek.reduce((a, e) => a + num(e.hours), 0);
+  const weekValue = inWeek.filter((e) => e.billable).reduce((a, e) => { const p = projectOf(e.project_id); return a + (p && p.billing_mode === "hourly" ? num(e.hours) * rateOf(p) : 0); }, 0);
+  return `<main>
+    <div class="view-head">
+      <div><h2>Timesheet</h2><div class="sub">Type the hours you spent per project per day. Entries save as you leave each cell.</div></div>
+      <div class="week-nav">
+        <button class="btn sm" data-act="week" data-d="-7" aria-label="Previous week">←</button>
+        <span class="range">${fmtDate(S.week)} – ${fmtDateY(end)}</span>
+        <button class="btn sm" data-act="week" data-d="7" aria-label="Next week">→</button>
+        <button class="btn sm ghost" data-act="week" data-d="0">This week</button>
+      </div>
+    </div>
+    ${rows.length ? `<div class="table-wrap"><table class="ts">
+      <thead><tr><th>Project</th>${days.map((d) => `<th class="n ${d === t ? "today" : ""}">${fmtDate(d, { weekday: "short" })} <span style="font-weight:400">${parseDate(d).getDate()}</span></th>`).join("")}<th class="n">Total</th></tr></thead>
+      <tbody>${body}</tbody>
+      <tfoot><tr><td>Day total</td>${days.map((d) => { const s = inWeek.filter((e) => e.date === d).reduce((a, e) => a + num(e.hours), 0); return `<td class="n ${d === t ? "today" : ""}" data-daytotal="${d}">${s ? hrs(s) : ""}</td>`; }).join("")}<td class="n" data-weektotal>${hrs(weekTotal)}</td></tr></tfoot>
+    </table></div>` : `<div class="panel list-empty">No active projects. Create one, or add an older project below.</div>`}
+    <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:14px;justify-content:space-between">
+      ${others.length ? `<label class="check">Add a row <select class="input" id="ts-add" style="width:auto"><option value="">Choose a project…</option>${others.map((p) => `<option value="${p.id}">${esc(p.name)}${clientOf(p) ? " · " + esc(clientOf(p).name) : ""}</option>`).join("")}</select></label>` : "<span></span>"}
+      <span class="muted">Hourly work this week: <b class="fig" style="color:var(--ink)" data-weekvalue>${eur(weekValue)}</b></span>
+    </div>
+    <p class="note">New entries from this grid are billable. Untick billable or add a note in the project's Time tab.</p>
+  </main>`;
+}
+
+function refreshWeekTotals() {
+  const days = Array.from({ length: 7 }, (_, i) => addDays(S.week, i));
+  const inWeek = S.time_entries.filter((e) => e.date >= S.week && e.date <= days[6]);
+  document.querySelectorAll("[data-rowtotal]").forEach((el) => { const s = inWeek.filter((e) => e.project_id === el.dataset.rowtotal).reduce((a, e) => a + num(e.hours), 0); el.textContent = s ? hrs(s) : ""; });
+  document.querySelectorAll("[data-daytotal]").forEach((el) => { const s = inWeek.filter((e) => e.date === el.dataset.daytotal).reduce((a, e) => a + num(e.hours), 0); el.textContent = s ? hrs(s) : ""; });
+  const wt = $("[data-weektotal]"); if (wt) wt.textContent = hrs(inWeek.reduce((a, e) => a + num(e.hours), 0));
+  const wv = $("[data-weekvalue]"); if (wv) wv.textContent = eur(inWeek.filter((e) => e.billable).reduce((a, e) => { const p = projectOf(e.project_id); return a + (p && p.billing_mode === "hourly" ? num(e.hours) * rateOf(p) : 0); }, 0));
+}
+
+/* ----- money ----- */
+function moneyView() {
+  const t = today();
+  const ym = t.slice(0, 7), y = t.slice(0, 4);
+  const rec = S.payments.filter((p) => p.status === "received");
+  const recDate = (p) => p.paid_date || p.created_at.slice(0, 10);
+  const inv = S.payments.filter((p) => p.status === "invoiced");
+  const overdue = inv.filter((p) => isLate(p.due_date));
+  const expd = S.payments.filter((p) => p.status === "expected");
+  const sum = (a) => a.reduce((s, p) => s + num(p.amount), 0);
+  const unscheduled = S.projects.filter((p) => p.status === "active").reduce((s, p) => s + moneyOf(p).unscheduled, 0);
+
+  // last 12 months received
+  const months = [];
+  const now = new Date(); now.setDate(1);
+  for (let i = 11; i >= 0; i--) { const d = new Date(now.getFullYear(), now.getMonth() - i, 1); months.push(`${d.getFullYear()}-${pad(d.getMonth() + 1)}`); }
+  const byMonth = months.map((m) => ({ m, v: sum(rec.filter((p) => recDate(p).slice(0, 7) === m)) }));
+
+  const f = S.moneyFilter;
+  const list = S.payments.filter((p) => f === "all" ? true : f === "open" ? p.status !== "received" : p.status === "received")
+    .sort((a, b) => (a.status === "received" ? (recDate(b)).localeCompare(recDate(a)) : (a.due_date || "9999").localeCompare(b.due_date || "9999")));
+  const rows = list.map((p) => {
+    const pr = projectOf(p.project_id), c = clientOf(pr);
+    const od = p.status === "invoiced" && isLate(p.due_date);
+    return `<tr class="link" data-act="open" data-id="${p.project_id}" data-sub="payments">
+      <td><span class="pill ${od ? "overdue" : p.status}">${od ? "Overdue" : PAY_LABEL[p.status]}</span></td>
+      <td>${c ? `<span class="chip" style="${cv(c.color)}">${esc(c.name)}</span>` : ""}</td>
+      <td>${esc(pr?.name || "")}</td>
+      <td>${esc(p.label || "")}${p.invoice_no ? ` <span class="muted fig">${esc(p.invoice_no)}</span>` : ""}</td>
+      <td class="n">${p.status === "received" ? fmtDateY(recDate(p)) : p.due_date ? fmtDateY(p.due_date) : "–"}</td>
+      <td class="n">${eur(p.amount)}</td>
+    </tr>`;
+  }).join("");
+  const segBtn = (k, l) => `<button data-act="money-filter" data-v="${k}" aria-pressed="${f === k}">${l}</button>`;
+  return `<main>
+    <div class="view-head"><div><h2>Money</h2><div class="sub">What's been paid, what's waiting and what hasn't been invoiced yet.</div></div></div>
+    <div class="stats">
+      <div class="stat"><span class="label">Received in ${parseDate(t).toLocaleDateString("en-GB", { month: "long" })}</span><span class="v">${eur(sum(rec.filter((p) => recDate(p).startsWith(ym))))}</span><span class="d">${eur(sum(rec.filter((p) => recDate(p).startsWith(y))))} so far in ${y}</span></div>
+      <div class="stat ${overdue.length ? "alert" : ""}"><span class="label">Invoiced, unpaid</span><span class="v">${eur(sum(inv))}</span><span class="d">${inv.length} invoice${inv.length === 1 ? "" : "s"}${overdue.length ? ` · ${overdue.length} overdue (${eur(sum(overdue))})` : ""}</span></div>
+      <div class="stat"><span class="label">Expected</span><span class="v">${eur(sum(expd))}</span><span class="d">Agreed, not invoiced yet</span></div>
+      <div class="stat"><span class="label">Not scheduled</span><span class="v">${eur(unscheduled)}</span><span class="d">Active project value with no payment set up</span></div>
+    </div>
+    <div class="chart-box">
+      <div style="display:flex;justify-content:space-between;gap:8px;align-items:baseline;flex-wrap:wrap"><h3>Received per month</h3><span class="muted fig" style="font-size:12px">Last 12 months · ${eur(byMonth.reduce((a, b) => a + b.v, 0))}</span></div>
+      ${barChart(byMonth, ym)}
+    </div>
+    <div class="view-head" style="margin-bottom:10px"><h3>Payments</h3><div class="seg">${segBtn("open", "Open")}${segBtn("received", "Received")}${segBtn("all", "All")}</div></div>
+    ${rows ? `<div class="table-wrap"><table><thead><tr><th>Status</th><th>Client</th><th>Project</th><th>Payment</th><th class="n">${f === "received" ? "Paid" : "Due"}</th><th class="n">Amount</th></tr></thead><tbody>${rows}</tbody>
+      <tfoot><tr><td colspan="5">Total</td><td class="n">${eur(sum(list))}</td></tr></tfoot></table></div>`
+      : `<div class="panel list-empty">No payments here. Add payments from a project's Payments tab.</div>`}
+  </main>`;
+}
+
+function niceStep(v) {
+  if (v <= 0) return 250;
+  const p = Math.pow(10, Math.floor(Math.log10(v)));
+  for (const m of [1, 2, 2.5, 5, 10]) if (m * p >= v) return m * p;
+  return 10 * p;
+}
+function barChart(data, current) {
+  const peak = Math.max(...data.map((d) => d.v));
+  const step = niceStep(peak / 4);
+  const max = Math.max(step, Math.ceil(peak / step) * step);
+  const ticks = []; for (let v = 0; v <= max + 0.001; v += step) ticks.push(v);
+  const kfmt = (v) => v >= 1000 ? "€" + (+(v / 1000).toFixed(1)) + "k" : "€" + v;
+  const monthName = (m, o) => parseDate(m + "-01").toLocaleDateString("en-GB", o);
+  return `<div class="bars" role="img" aria-label="Received per month, last 12 months">
+    <div class="bars-y">${ticks.slice().reverse().map((v) => `<span>${kfmt(v)}</span>`).join("")}</div>
+    <div class="bars-plot">
+      ${ticks.map((v) => `<i class="gl" style="bottom:${(v / max) * 100}%"></i>`).join("")}
+      ${data.map((d) => `<div class="bars-col" data-tip="${esc(monthName(d.m, { month: "long", year: "numeric" }))}: ${esc(eur(d.v))}">
+        <b class="${d.m === current ? "now" : ""}" style="height:${(d.v / max) * 100}%"></b>
+      </div>`).join("")}
+    </div>
+    <div></div>
+    <div class="bars-x">${data.map((d) => `<span>${monthName(d.m, { month: "short" }).slice(0, 3)}</span>`).join("")}</div>
+  </div>
+  <details style="margin-top:6px"><summary class="note" style="cursor:pointer">Show as table</summary>
+    <table style="margin-top:6px"><tbody>${data.map((d) => `<tr><td>${monthName(d.m, { month: "long", year: "numeric" })}</td><td class="n">${eur(d.v)}</td></tr>`).join("")}</tbody></table></details>`;
+}
+
+/* ----- clients ----- */
+function clientsView() {
+  const cards = S.clients.map((c) => {
+    const ps = S.projects.filter((p) => p.client_id === c.id);
+    const active = ps.filter((p) => p.status === "active").length;
+    const received = S.payments.filter((y) => y.status === "received" && ps.some((p) => p.id === y.project_id)).reduce((a, y) => a + num(y.amount), 0);
+    const hours = S.time_entries.filter((e) => ps.some((p) => p.id === e.project_id)).reduce((a, e) => a + num(e.hours), 0);
+    return `<div class="client" style="--c:${esc(c.color)}">
+      <div class="client-head">
+        <span class="swatch-btn" style="--c:${esc(c.color)}" aria-hidden="true"></span>
+        <input class="input bare" id="c-name-${c.id}" value="${esc(c.name)}" data-cfield="name" data-id="${c.id}" aria-label="Client name">
+        ${c.example ? `<span class="pill example">Example</span>` : ""}
+      </div>
+      <div class="swatches" role="group" aria-label="Client colour">
+        ${COLORS.map((col) => `<button style="--c:${col}" data-act="client-color" data-id="${c.id}" data-color="${col}" aria-pressed="${c.color.toLowerCase() === col.toLowerCase()}" aria-label="Colour ${col}"></button>`).join("")}
+        <input type="color" id="c-color-${c.id}" value="${esc(c.color)}" data-cfield="color" data-id="${c.id}" aria-label="Custom colour" title="Custom colour">
+      </div>
+      <div class="grid2">
+        <label class="field"><span>Default rate €/h</span><input class="input fig" id="c-rate-${c.id}" inputmode="decimal" value="${c.default_rate ?? ""}" placeholder="45" data-cfield="default_rate" data-id="${c.id}"></label>
+        <label class="field"><span>Email</span><input class="input" id="c-email-${c.id}" type="email" value="${esc(c.email || "")}" placeholder="contact@client.com" data-cfield="email" data-id="${c.id}"></label>
+      </div>
+      <label class="field"><span>Notes</span><input class="input" id="c-notes-${c.id}" value="${esc(c.notes || "")}" placeholder="Billing details, VAT code, contacts" data-cfield="notes" data-id="${c.id}"></label>
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap">
+        <div class="client-stats"><span><b>${active}</b> active</span><span><b>${ps.length}</b> total</span><span><b>${hrs(hours)}</b></span><span><b>${eur(received)}</b> received</span></div>
+        <button class="btn sm ghost danger" data-act="del-client" data-id="${c.id}">Delete</button>
+      </div>
+    </div>`;
+  }).join("");
+  return `<main>
+    <div class="view-head"><div><h2>Clients</h2><div class="sub">Colours show on every project card. The default rate applies unless a project sets its own.</div></div>
+      <button class="btn primary" data-act="new-client">Add client</button></div>
+    ${cards ? `<div class="client-grid">${cards}</div>` : `<div class="panel list-empty">No clients yet. Add your first client to start colour-coding projects.</div>`}
+  </main>`;
+}
+
+/* ----- modals ----- */
+function openModal(html, onMount) {
+  closeModal();
+  const wrap = document.createElement("div");
+  wrap.id = "modal-wrap";
+  wrap.innerHTML = `<div class="scrim modal-scrim" data-act="close-modal"></div><div class="modal" role="dialog" aria-modal="true">${html}</div>`;
+  $("#layer").appendChild(wrap);
+  const first = wrap.querySelector("input, select, textarea");
+  if (first) first.focus();
+  onMount && onMount(wrap);
+}
+function closeModal() { const m = $("#modal-wrap"); if (m) m.remove(); }
+
+function newProjectModal() {
+  openModal(`<form id="np-form" style="display:grid;gap:14px">
+    <h2>New project</h2>
+    <label class="field"><span>Project name</span><input class="input" name="name" id="npm-name" required placeholder="e.g. Spring campaign key visuals"></label>
+    <div class="grid2">
+      <label class="field"><span>Client</span><select class="input" name="client_id" id="npm-client">
+        <option value="">No client</option>${S.clients.map((c) => `<option value="${c.id}">${esc(c.name)}</option>`).join("")}<option value="__new">+ New client…</option></select></label>
+      <label class="field" id="npm-newclient-f" hidden><span>New client name</span><input class="input" name="new_client" id="npm-newclient"></label>
+      <label class="field"><span>Billing</span><select class="input" name="billing_mode" id="npm-billing">${Object.entries(BILLING).map(([k, l]) => `<option value="${k}">${l}</option>`).join("")}</select></label>
+    </div>
+    <div class="grid3">
+      <label class="field"><span>Hourly rate €</span><input class="input" name="rate" id="npm-rate" inputmode="decimal" placeholder="Client default"></label>
+      <label class="field"><span>Fixed fee €</span><input class="input" name="fixed_fee" id="npm-fee" inputmode="decimal"></label>
+      <label class="field"><span>Due date</span><input class="input" type="date" name="due_date" id="npm-due"></label>
+    </div>
+    <label class="field"><span>Tags</span><input class="input" name="tags" id="npm-tags" placeholder="#design #content"></label>
+    <div class="field"><span>Stages this job goes through</span>
+      <div class="presets">${PRESETS.map((p, i) => `<button type="button" class="btn sm" data-preset="${i}">${p.name}</button>`).join("")}</div>
+      <div class="stage-checks">${STAGES.map((s) => `<label class="check"><input type="checkbox" name="st" value="${s.key}" checked ${s.key === "brief" || s.key === "paid" ? "disabled" : ""}> ${s.label}</label>`).join("")}</div>
+    </div>
+    <div class="foot"><button type="button" class="btn ghost" data-act="close-modal">Cancel</button><button class="btn primary" type="submit">Create project</button></div>
+  </form>`, (w) => {
+    const sel = w.querySelector("#npm-client");
+    sel.addEventListener("change", () => { w.querySelector("#npm-newclient-f").hidden = sel.value !== "__new"; });
+    w.querySelectorAll("[data-preset]").forEach((b) => b.addEventListener("click", () => {
+      const skip = PRESETS[+b.dataset.preset].skip;
+      w.querySelectorAll('input[name="st"]').forEach((cb) => { if (!cb.disabled) cb.checked = !skip.includes(cb.value); });
+    }));
+  });
+}
+
+function newClientModal() {
+  const col = COLORS[S.clients.length % COLORS.length];
+  openModal(`<form id="nc-form" style="display:grid;gap:14px">
+    <h2>New client</h2>
+    <label class="field"><span>Name</span><input class="input" name="name" id="ncm-name" required></label>
+    <div class="field"><span>Colour</span><div class="swatches">${COLORS.map((c) => `<button type="button" style="--c:${c}" data-pick="${c}" aria-pressed="${c === col}" aria-label="Colour ${c}"></button>`).join("")}<input type="color" name="color" id="ncm-color" value="${col}" aria-label="Custom colour"></div></div>
+    <div class="grid2">
+      <label class="field"><span>Default rate €/h</span><input class="input" name="default_rate" id="ncm-rate" inputmode="decimal" placeholder="45"></label>
+      <label class="field"><span>Email</span><input class="input" type="email" name="email" id="ncm-email"></label>
+    </div>
+    <div class="foot"><button type="button" class="btn ghost" data-act="close-modal">Cancel</button><button class="btn primary" type="submit">Add client</button></div>
+  </form>`, (w) => {
+    w.querySelectorAll("[data-pick]").forEach((b) => b.addEventListener("click", () => {
+      w.querySelector("#ncm-color").value = b.dataset.pick;
+      w.querySelectorAll("[data-pick]").forEach((x) => x.setAttribute("aria-pressed", x === b));
+    }));
+  });
+}
+
+function logTimeModal(pid) {
+  const projects = S.projects.filter((p) => p.status === "active" || p.id === pid);
+  if (!projects.length) { toast("Create a project first, then log time to it."); return; }
+  const opts = projects.map((p) => `<option value="${p.id}" ${p.id === pid ? "selected" : ""}>${esc(p.name)}${clientOf(p) ? " · " + esc(clientOf(p).name) : ""}</option>`).join("");
+  openModal(`<form id="lt-form" style="display:grid;gap:14px">
+    <h2>Log time</h2>
+    <label class="field"><span>Project</span><select class="input" name="project_id" id="ltm-project" required>${opts}</select></label>
+    <div class="grid3">
+      <label class="field"><span>Date</span><input class="input" type="date" name="date" id="ltm-date" value="${today()}" required></label>
+      <label class="field"><span>Hours</span><input class="input" name="hours" id="ltm-hours" inputmode="decimal" placeholder="3.5" required></label>
+      <label class="field"><span>Task</span><select class="input" name="task_id" id="ltm-task"></select></label>
+    </div>
+    <label class="field"><span>Note</span><input class="input" name="note" id="ltm-note" placeholder="What you worked on"></label>
+    <label class="check"><input type="checkbox" name="billable" checked> Billable</label>
+    <div class="foot"><button type="button" class="btn ghost" data-act="close-modal">Cancel</button><button class="btn primary" type="submit">Log time</button></div>
+  </form>`, (w) => {
+    const ps = w.querySelector("#ltm-project"), ts = w.querySelector("#ltm-task");
+    const fill = () => { ts.innerHTML = `<option value="">No task</option>` + S.tasks.filter((t) => t.project_id === ps.value && t.status !== "done").map((t) => `<option value="${t.id}">${esc(t.name)}</option>`).join(""); };
+    ps.addEventListener("change", fill); fill();
+    w.querySelector("#ltm-hours").focus();
+  });
+}
+
+/* ===================== actions ===================== */
+function parseHours(v) {
+  const s = String(v || "").trim().replace(",", ".");
+  if (!s) return 0;
+  const m = s.match(/^(\d+):(\d{1,2})$/); // 1:30
+  if (m) return +m[1] + +m[2] / 60;
+  const n = Number(s);
+  return Number.isFinite(n) ? n : NaN;
+}
+
+const actions = {
+  view(el) { S.view = el.dataset.v; store.set("view", S.view); render(); window.scrollTo(0, 0); },
+  open(el) { S.open = el.dataset.id; if (el.dataset.sub) S.sub = el.dataset.sub; S.editSteps = false; renderSheet(); },
+  "close-sheet"() { S.open = null; S.editSteps = false; renderSheet(); },
+  "close-modal"() { closeModal(); },
+  "new-project"() { newProjectModal(); },
+  "new-client"() { newClientModal(); },
+  "log-time"() { logTimeModal(S.open); },
+  sub(el) { S.sub = el.dataset.v; store.set("sub", S.sub); renderSheet(); },
+  "edit-steps"() { S.editSteps = !S.editSteps; renderSheet(); },
+  async "set-stage"(el) { const p = projectOf(S.open); if (p.stage !== el.dataset.stage) await save("projects", { id: p.id, stage: el.dataset.stage }); },
+  async "toggle-skip"(el) {
+    const p = projectOf(S.open), k = el.dataset.stage;
+    if (k === "brief" || k === "paid") { toast("Brief and Paid are part of every job."); return; }
+    if (k === p.stage) { toast("Move the project off this stage before skipping it."); return; }
+    const sk = new Set(p.skipped_stages || []); sk.has(k) ? sk.delete(k) : sk.add(k);
+    await save("projects", { id: p.id, skipped_stages: [...sk] });
+  },
+  async advance(el) {
+    const p = projectOf(el.dataset.id), n = nextStage(p, +(el.dataset.dir || 1));
+    if (n) { await save("projects", { id: p.id, stage: n }); toast(`${p.name} → ${STAGES[STAGE_IDX[n]].label}`); }
+  },
+  async "cycle-task"(el) {
+    const t = S.tasks.find((x) => x.id === el.dataset.id);
+    await save("tasks", { id: t.id, status: TASK_STATUS[(TASK_STATUS.indexOf(t.status) + 1) % 4] });
+  },
+  async "del-task"(el) { await remove("tasks", el.dataset.id); },
+  async "del-time"(el) { await remove("time_entries", el.dataset.id); },
+  async "del-pay"(el) { await remove("payments", el.dataset.id); },
+  async "toggle-billable"(el) { await save("time_entries", { id: el.dataset.id, billable: el.checked }); },
+  async schedule(el) {
+    const p = projectOf(S.open), m = moneyOf(p), parts = +el.dataset.parts;
+    const each = Math.floor((m.unscheduled / parts) * 100) / 100;
+    const labels = parts === 1 ? ["Payment"] : parts === 2 ? ["Deposit", "Final"] : ["Part 1", "Part 2", "Final"];
+    for (let i = 0; i < parts; i++) {
+      const amt = i === parts - 1 ? Math.round((m.unscheduled - each * (parts - 1)) * 100) / 100 : each;
+      await save("payments", { project_id: p.id, label: labels[i], amount: amt, status: "expected" }, { quiet: true });
+    }
+    render();
+  },
+  async "del-project"(el) {
+    if (!el.classList.contains("confirm")) { el.classList.add("confirm"); el.textContent = "Delete project, its tasks, time and payments"; return; }
+    const id = el.dataset.id; S.open = null; await remove("projects", id); toast("Project deleted");
+  },
+  async "del-client"(el) {
+    if (!el.classList.contains("confirm")) { el.classList.add("confirm"); el.textContent = "Confirm delete"; return; }
+    await remove("clients", el.dataset.id); toast("Client deleted. Their projects are kept.");
+  },
+  async "client-color"(el) { await save("clients", { id: el.dataset.id, color: el.dataset.color }); },
+  week(el) { const d = +el.dataset.d; S.week = d === 0 ? mondayOf(today()) : addDays(S.week, d); render(); },
+  "money-filter"(el) { S.moneyFilter = el.dataset.v; render(); },
+  async "sign-out"() { await sb.auth.signOut(); },
+  "login-again"() { S.loginSent = null; render(); },
+  async "load-examples"(el) { el.disabled = true; try { await loadExamples(); } finally { el.disabled = false; } },
+  async "clear-examples"(el) {
+    el.disabled = true;
+    try {
+      setSync("saving");
+      const a = await sb.from("projects").delete().eq("example", true);
+      const b = await sb.from("clients").delete().eq("example", true);
+      if (a.error || b.error) throw a.error || b.error;
+      await loadAll(); toast("Examples removed");
+    } catch (e) { setSync("error"); toast("Couldn't remove examples: " + e.message, "bad"); el.disabled = false; }
+  },
+};
+
+document.addEventListener("click", (e) => {
+  const el = e.target.closest("[data-act]");
+  if (el) {
+    if (el.tagName === "INPUT" && el.type === "checkbox" && el.dataset.act === "toggle-billable") return; // handled on change
+    const fn = actions[el.dataset.act];
+    if (fn) { e.preventDefault(); Promise.resolve(fn(el, e)).catch(() => {}); }
+    return;
+  }
+  const c = e.target.closest("[data-card]");
+  if (c) { S.open = c.dataset.card; S.editSteps = false; renderSheet(); }
+});
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape") { if ($("#modal-wrap")) closeModal(); else if (S.open) { S.open = null; renderSheet(); } }
+  if (e.key === "Enter" && e.target.matches("[data-card]")) { S.open = e.target.dataset.card; renderSheet(); }
+  if (e.key === "Enter" && e.target.matches("input[data-ts], input[data-tfield], input[data-yfield], input[data-cfield]")) e.target.blur();
+});
+
+document.addEventListener("change", async (e) => {
+  const el = e.target;
+  try {
+    if (el.dataset.act === "toggle-billable") return actions["toggle-billable"](el);
+    if (el.dataset.filter) {
+      S.filter[el.dataset.filter] = el.type === "checkbox" ? el.checked : el.value;
+      store.set("filter", S.filter); render(); return;
+    }
+    if (el.dataset.tfield) {
+      const v = el.dataset.tfield === "tags" ? parseTags(el.value) : el.value.trim();
+      if (el.dataset.tfield === "name" && !v) { render(); return; }
+      return await save("tasks", { id: el.dataset.id, [el.dataset.tfield]: v });
+    }
+    if (el.dataset.yfield) {
+      const f = el.dataset.yfield; let v = el.value;
+      const rec = { id: el.dataset.id };
+      if (f === "amount") { v = numOrNull(v); if (v == null || !Number.isFinite(v)) { toast("Enter an amount in euros, e.g. 600", "bad"); render(); return; } }
+      else v = orNull(v.trim ? v.trim() : v);
+      rec[f] = v;
+      if (f === "status" && v === "received") { const y = S.payments.find((x) => x.id === el.dataset.id); if (!y.paid_date) rec.paid_date = today(); }
+      return await save("payments", rec);
+    }
+    if (el.dataset.cfield) {
+      const f = el.dataset.cfield; let v = el.value.trim();
+      if (f === "name" && !v) { render(); return; }
+      if (f === "default_rate") v = numOrNull(v); else if (f !== "color") v = orNull(v);
+      return await save("clients", { id: el.dataset.id, [f]: v });
+    }
+    if (el.dataset.pfield === "name") {
+      const v = el.value.trim(); if (!v) { renderSheet(); return; }
+      return await save("projects", { id: S.open, name: v });
+    }
+    if (el.dataset.ts) return await saveCell(el);
+    if (el.id === "ts-add" && el.value) {
+      const rows = store.get("weekRows", []); rows.push(el.value); store.set("weekRows", [...new Set(rows)]); render(); return;
+    }
+  } catch (err) { /* toast already shown */ }
+});
+
+async function saveCell(el) {
+  const pid = el.dataset.ts, date = el.dataset.date;
+  const h = parseHours(el.value);
+  if (Number.isNaN(h) || h < 0 || h > 24) { toast("Hours should be a number between 0 and 24, like 2.5 or 2:30", "bad"); el.value = ""; return; }
+  const existing = S.time_entries.find((e) => e.project_id === pid && e.date === date);
+  try {
+    if (!h && existing) await remove("time_entries", existing.id, { quiet: true });
+    else if (h && existing) { if (num(existing.hours) !== h) await save("time_entries", { id: existing.id, hours: h }, { quiet: true }); }
+    else if (h) await save("time_entries", { project_id: pid, date, hours: h, billable: true }, { quiet: true });
+    el.value = h ? +h.toFixed(2) : "";
+    refreshWeekTotals();
+  } catch {}
+}
+
+document.addEventListener("input", (e) => {
+  if (e.target.dataset.filter === "q") {
+    S.filter.q = e.target.value; store.set("filter", S.filter);
+    clearTimeout(window.__qt); window.__qt = setTimeout(render, 180);
+  }
+});
+
+document.addEventListener("submit", async (e) => {
+  const f = e.target; e.preventDefault();
+  const fd = new FormData(f);
+  const btn = f.querySelector('[type="submit"]'); if (btn) btn.disabled = true;
+  try {
+    if (f.id === "login-form") {
+      const email = fd.get("email") || $("#login-email").value;
+      S.loginError = null;
+      const { error } = await sb.auth.signInWithOtp({ email, options: { emailRedirectTo: location.origin + location.pathname } });
+      if (error) {
+        S.loginError = /database error|sign-?ups/i.test(error.message) ? "This tracker already has an owner. Sign in with the owner's email." : error.message;
+      } else S.loginSent = email;
+      render(); return;
+    }
+    if (f.id === "add-task") {
+      const name = fd.get("name").trim(); if (!name) return;
+      const max = Math.max(0, ...S.tasks.filter((t) => t.project_id === S.open).map((t) => t.position));
+      await save("tasks", { project_id: S.open, name, tags: parseTags(fd.get("tags")), position: max + 1 });
+      $("#nt-name")?.focus(); if ($("#nt-name")) $("#nt-name").value = ""; if ($("#nt-tags")) $("#nt-tags").value = "";
+      return;
+    }
+    if (f.id === "add-time" || f.id === "lt-form") {
+      const h = parseHours(fd.get("hours"));
+      if (!h || Number.isNaN(h) || h > 24) { toast("Hours should be a number between 0 and 24, like 2.5 or 2:30", "bad"); return; }
+      await save("time_entries", {
+        project_id: fd.get("project_id") || S.open, date: fd.get("date"), hours: h,
+        task_id: orNull(fd.get("task_id")), note: orNull((fd.get("note") || "").trim()), billable: fd.get("billable") === "on",
+      });
+      if (f.id === "lt-form") { closeModal(); toast(`Logged ${hrs(h)}`); } else { $("#nte-hours").value = ""; $("#nte-note").value = ""; $("#nte-hours").focus(); }
+      return;
+    }
+    if (f.id === "add-pay") {
+      const amount = numOrNull(fd.get("amount"));
+      if (amount == null || !Number.isFinite(amount)) { toast("Enter an amount in euros, e.g. 600", "bad"); return; }
+      const status = fd.get("status");
+      await save("payments", { project_id: S.open, label: orNull(fd.get("label").trim()), amount, status, due_date: orNull(fd.get("due_date")), paid_date: status === "received" ? today() : null });
+      return;
+    }
+    if (f.id === "details") {
+      const rec = {
+        id: S.open, client_id: orNull(fd.get("client_id")), status: fd.get("status"), billing_mode: fd.get("billing_mode"),
+        rate: numOrNull(fd.get("rate")), fixed_fee: numOrNull(fd.get("fixed_fee")), included_hours: numOrNull(fd.get("included_hours")),
+        start_date: orNull(fd.get("start_date")), due_date: orNull(fd.get("due_date")), tags: parseTags(fd.get("tags")), description: orNull(fd.get("description")),
+      };
+      for (const k of ["rate", "fixed_fee", "included_hours"]) if (rec[k] != null && !Number.isFinite(rec[k])) { toast("Rates, fees and hours should be plain numbers, like 45 or 1200", "bad"); return; }
+      await save("projects", rec); toast("Details saved"); return;
+    }
+    if (f.id === "nc-form") {
+      const rate = numOrNull(fd.get("default_rate"));
+      await save("clients", { name: fd.get("name").trim(), color: fd.get("color"), default_rate: Number.isFinite(rate) ? rate : null, email: orNull(fd.get("email").trim()) });
+      closeModal(); toast("Client added"); return;
+    }
+    if (f.id === "np-form") {
+      let client_id = orNull(fd.get("client_id"));
+      if (client_id === "__new") {
+        const nm = (fd.get("new_client") || "").trim();
+        if (!nm) { toast("Give the new client a name", "bad"); return; }
+        const c = await save("clients", { name: nm, color: COLORS[S.clients.length % COLORS.length] }, { quiet: true });
+        client_id = c.id;
+      }
+      const on = fd.getAll("st");
+      const skipped = STAGES.map((s) => s.key).filter((k) => k !== "brief" && k !== "paid" && !on.includes(k));
+      const rate = numOrNull(fd.get("rate")), fee = numOrNull(fd.get("fixed_fee"));
+      const p = await save("projects", {
+        name: fd.get("name").trim(), client_id, billing_mode: fd.get("billing_mode"),
+        rate: Number.isFinite(rate) ? rate : null, fixed_fee: Number.isFinite(fee) ? fee : null,
+        due_date: orNull(fd.get("due_date")), tags: parseTags(fd.get("tags")), skipped_stages: skipped,
+        stage: "brief", start_date: today(),
+      });
+      closeModal(); S.view = "board"; store.set("view", "board"); S.open = p.id; S.sub = "tasks"; render(); return;
+    }
+  } catch (err) { /* toast already shown */ }
+  finally { if (btn && document.contains(btn)) btn.disabled = false; }
+});
+
+/* drag and drop on the rail */
+document.addEventListener("dragstart", (e) => {
+  const c = e.target.closest?.("[data-card]"); if (!c) return;
+  e.dataTransfer.setData("text/plain", c.dataset.card); e.dataTransfer.effectAllowed = "move"; c.classList.add("dragging");
+});
+document.addEventListener("dragend", (e) => { e.target.closest?.("[data-card]")?.classList.remove("dragging"); document.querySelectorAll(".col.drop").forEach((x) => x.classList.remove("drop")); });
+document.addEventListener("dragover", (e) => { const col = e.target.closest?.("[data-drop]"); if (!col) return; e.preventDefault(); document.querySelectorAll(".col.drop").forEach((x) => x !== col && x.classList.remove("drop")); col.classList.add("drop"); });
+document.addEventListener("drop", async (e) => {
+  const col = e.target.closest?.("[data-drop]"); if (!col) return; e.preventDefault(); col.classList.remove("drop");
+  const id = e.dataTransfer.getData("text/plain"), p = projectOf(id), stage = col.dataset.drop;
+  if (!p || p.stage === stage) return;
+  const skipped = (p.skipped_stages || []).filter((k) => k !== stage);
+  try { await save("projects", { id, stage, skipped_stages: skipped }); } catch {}
+});
+
+/* chart tooltip */
+document.addEventListener("mousemove", (e) => {
+  const g = e.target.closest?.("[data-tip]");
+  let tip = $(".chart-tip");
+  if (!g) { if (tip) tip.remove(); return; }
+  if (!tip) { tip = document.createElement("div"); tip.className = "chart-tip"; document.body.appendChild(tip); }
+  tip.textContent = g.dataset.tip;
+  tip.style.left = Math.min(e.clientX + 12, innerWidth - tip.offsetWidth - 8) + "px";
+  tip.style.top = e.clientY - 34 + "px";
+});
+
+/* ===================== example data ===================== */
+async function loadExamples() {
+  const t = today();
+  const c1 = await save("clients", { name: "Harbour Coffee Co.", color: "#C2412D", default_rate: 45, example: true, notes: "Example client" }, { quiet: true });
+  const c2 = await save("clients", { name: "Pine Coast Hotels", color: "#2F7D6D", default_rate: 50, example: true, notes: "Example client" }, { quiet: true });
+  const p1 = await save("projects", { name: "Winter menu photography", client_id: c1.id, stage: "production", billing_mode: "fixed", fixed_fee: 1800, tags: ["content", "photo"], due_date: addDays(t, 9), start_date: addDays(t, -12), example: true }, { quiet: true });
+  const p2 = await save("projects", { name: "Website refresh", client_id: c2.id, stage: "review", billing_mode: "fixed_plus", fixed_fee: 2400, included_hours: 40, tags: ["web", "design"], due_date: addDays(t, 3), start_date: addDays(t, -30), example: true }, { quiet: true });
+  const p3 = await save("projects", { name: "Autumn campaign ideas", client_id: c2.id, stage: "pitch", billing_mode: "hourly", skipped_stages: ["production", "review", "delivered"], tags: ["creative", "pitch"], start_date: addDays(t, -4), example: true }, { quiet: true });
+  const p4 = await save("projects", { name: "Seasonal social posts", client_id: c1.id, stage: "invoiced", billing_mode: "hourly", tags: ["content"], start_date: addDays(t, -40), example: true }, { quiet: true });
+  const tasks = [
+    [p1, "Shot list", "done", ["planning"]], [p1, "Shoot day", "done", ["photo"]], [p1, "Retouching", "doing", ["photo"]], [p1, "Deliver final files", "todo", []],
+    [p2, "Homepage design", "done", ["figma"]], [p2, "Build templates", "done", ["dev"]], [p2, "Client feedback round", "waiting", ["revision"]],
+    [p3, "Three concept directions", "doing", ["creative"]], [p3, "Pitch deck", "todo", ["deck"]],
+  ];
+  const tmap = {};
+  let pos = 0;
+  for (const [p, name, status, tags] of tasks) tmap[name] = await save("tasks", { project_id: p.id, name, status, tags, position: pos++ }, { quiet: true });
+  const time = [
+    [p1, -10, 2, "Shot list"], [p1, -7, 7.5, "Shoot day"], [p1, -2, 4, "Retouching"], [p1, -1, 3.5, "Retouching"],
+    [p2, -20, 12, "Homepage design"], [p2, -12, 16, "Build templates"], [p2, -5, 9, "Build templates"], [p2, -2, 6, "Client feedback round"],
+    [p3, -3, 3, "Three concept directions"], [p3, -1, 2.5, "Three concept directions"], [p3, 0, 1.5, null],
+    [p4, -35, 6, null], [p4, -28, 5, null],
+  ];
+  for (const [p, d, h, task] of time) await save("time_entries", { project_id: p.id, date: addDays(t, d), hours: h, task_id: task ? tmap[task].id : null, billable: p !== p3 || d !== 0, note: null }, { quiet: true });
+  const pays = [
+    [p1, "Deposit", 900, "received", null, addDays(t, -12)], [p1, "Final", 900, "expected", addDays(t, 14), null],
+    [p2, "Deposit", 1200, "received", null, addDays(t, -28)], [p2, "Second part", 800, "invoiced", addDays(t, -2), null],
+    [p4, "Invoice", 495, "invoiced", addDays(t, 10), null],
+  ];
+  for (const [p, label, amount, status, due, paid] of pays) await save("payments", { project_id: p.id, label, amount, status, due_date: due, paid_date: paid, invoice_no: status !== "expected" ? "MP-" + String(100 + Math.floor(Math.random() * 900)) : null }, { quiet: true });
+  render();
+  toast("Example data loaded");
+}
+
+/* ===================== boot ===================== */
+render();
+sb.auth.onAuthStateChange((event, session) => {
+  const was = S.user?.id;
+  S.user = session?.user || null;
+  if (S.user && S.user.id !== was) { S.loaded = false; render(); loadAll(); }
+  else if (!S.user) { S.loaded = false; S.open = null; TABLES.forEach((t) => (S[t] = [])); render(); }
+});
+</script>
+</body>
+</html>
