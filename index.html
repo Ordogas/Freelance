@@ -353,6 +353,30 @@ tfoot td { font-weight: 600; background: var(--surface-2); border-bottom: 0; }
 .stage-checks { display: flex; flex-wrap: wrap; gap: 6px 14px; }
 .scrim.modal-scrim { z-index: 50; }
 
+/* review queue */
+.btn.review { border-color: color-mix(in srgb, var(--warn) 55%, var(--line)); }
+.badge { display: inline-grid; place-items: center; min-width: 20px; height: 20px; padding: 0 6px; border-radius: 99px; background: var(--warn); color: var(--surface); font: 600 11.5px var(--font-figure); }
+.sg { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); padding: 14px; display: grid; gap: 10px; }
+.sg-head { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; font-size: 12px; }
+.sg-head .spacer { flex: 1; }
+.pill.kind { color: var(--accent); border-color: color-mix(in srgb, var(--accent) 35%, var(--line)); }
+.pill.medium { color: var(--warn); }
+.pill.low { color: var(--bad); }
+.sg h3 { font-size: 16px; }
+.sg-reason { margin: 0; color: var(--muted); font-size: 13px; }
+.sg-mail { background: var(--surface-2); border-radius: var(--r); padding: 10px 12px; display: grid; gap: 6px; font-size: 12.5px; min-width: 0; }
+.sg-mail .meta { display: flex; gap: 6px 10px; flex-wrap: wrap; align-items: baseline; min-width: 0; }
+.sg-mail .meta span { overflow-wrap: anywhere; }
+.sg-mail a { color: var(--accent); font-weight: 600; text-decoration: none; white-space: nowrap; }
+.sg-mail a:hover { text-decoration: underline; }
+.sg-mail blockquote { margin: 0; padding-left: 10px; border-left: 2px solid var(--line); color: var(--ink); white-space: pre-wrap; overflow-wrap: anywhere; max-height: 9.5em; overflow-y: auto; }
+.op { border: 1px solid var(--line); border-radius: var(--r); padding: 10px 12px; display: grid; gap: 10px; }
+.op.off .op-fields { opacity: .45; pointer-events: none; }
+.op-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.op-fields .wide { grid-column: 1 / -1; }
+.op-fields .was { font-size: 11px; color: var(--muted); font-weight: 400; }
+@media (max-width: 560px) { .op-fields { grid-template-columns: 1fr; } }
+.sg-foot { display: flex; justify-content: flex-end; gap: 8px; }
 #toast { position: fixed; left: 50%; bottom: calc(18px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); z-index: 70; display: grid; gap: 6px; }
 #toast div { background: var(--ink); color: var(--bg); padding: 9px 14px; border-radius: 6px; font-size: 13px; box-shadow: var(--shadow); animation: fade .15s; max-width: min(520px, calc(100vw - 32px)); }
 #toast div.bad { background: var(--bad); color: #fff; }
@@ -391,6 +415,19 @@ const PAY_STATUS = ["expected", "invoiced", "received"];
 const PAY_LABEL = { expected: "Expected", invoiced: "Invoiced", received: "Received" };
 const BILLING = { hourly: "Hourly", fixed: "Fixed fee", fixed_plus: "Fixed + extra hours" };
 const PROJECT_STATUS = { active: "Active", on_hold: "On hold", archived: "Archived", cancelled: "Cancelled" };
+const KIND_LABEL = { new_project: "New project", new_client: "New client", new_payment: "New payment", update_payment: "Payment update", update_project: "Project update", new_task: "New task" };
+const TABLE_LABEL = { clients: "client", projects: "project", tasks: "task", payments: "payment" };
+const ALLOWED = {
+  clients: ["name", "email", "default_rate", "color", "notes"],
+  projects: ["name", "client_id", "stage", "skipped_stages", "status", "billing_mode", "rate", "fixed_fee", "included_hours", "start_date", "due_date", "tags", "description"],
+  tasks: ["project_id", "name", "status", "tags", "due_date"],
+  payments: ["project_id", "label", "amount", "status", "invoice_no", "due_date", "paid_date", "note"],
+};
+const FIELD_LABEL = { name: "Name", email: "Email", notes: "Notes", default_rate: "Default rate €/h", color: "Colour", client_id: "Client", project_id: "Project",
+  description: "Brief and notes", stage: "Stage", skipped_stages: "Skipped stages", billing_mode: "Billing", rate: "Hourly rate €", fixed_fee: "Fixed fee €",
+  included_hours: "Hours in fee", tags: "Tags", start_date: "Start date", due_date: "Due date", status: "Status", label: "Label", amount: "Amount €",
+  invoice_no: "Invoice no.", paid_date: "Paid on", note: "Note" };
+const NUM_FIELDS = ["default_rate", "rate", "fixed_fee", "included_hours", "amount"];
 const COLORS = ["#C2412D", "#D97B1F", "#C9A227", "#5E9C3A", "#2F7D6D", "#2C8FB8", "#2C43C9", "#7A4CC2", "#B8438F", "#6B6F6C"];
 
 /* ===================== helpers ===================== */
@@ -437,6 +474,8 @@ const S = {
   editSteps: false,
   moneyFilter: "open",
   sync: "ok",
+  suggestions: [],
+  review: false,
 };
 
 /* ===================== supabase ===================== */
@@ -457,6 +496,8 @@ async function loadAll() {
   const err = res.find((r) => r.error);
   if (err) { setSync("error"); toast("Couldn't load your data: " + err.error.message, "bad"); return; }
   TABLES.forEach((t, i) => (S[t] = res[i].data || []));
+  const sg = await sb.from("suggestions").select("*").eq("status", "pending").order("created_at");
+  S.suggestions = sg.error ? [] : sg.data || [];
   S.loaded = true;
   setSync("ok");
   render();
@@ -583,6 +624,7 @@ function topbar() {
     <nav class="tabs" aria-label="Views">${tab("board", "Projects")}${tab("week", "Timesheet")}${tab("money", "Money")}${tab("clients", "Clients")}</nav>
     <div class="spacer"></div>
     <div class="actions">
+      ${S.suggestions.length ? `<button class="btn review" data-act="open-review" title="Changes found in your email, waiting for you to confirm">Review <span class="badge">${S.suggestions.length}</span></button>` : ""}
       <button class="btn" data-act="log-time">Log time</button>
       <button class="btn primary" data-act="new-project">New project</button>
       <button class="icon-btn" data-act="sign-out" title="Sign out (${esc(S.user.email)})" aria-label="Sign out">
@@ -697,9 +739,12 @@ function emptyState() {
 function renderSheet() {
   const layer = $("#layer");
   const p = S.open && projectOf(S.open);
-  const sheetHtml = p ? sheet(p) : "";
+  const sheetHtml = S.review ? reviewSheet() : p ? sheet(p) : "";
   let sheetEl = $("#sheet-wrap");
-  if (!p) { if (sheetEl) sheetEl.remove(); return; }
+  if (!sheetHtml) { if (sheetEl) sheetEl.remove(); return; }
+  // keep anything typed into suggestion fields across re-renders
+  const typed = {};
+  if (sheetEl) sheetEl.querySelectorAll('[id^="sg-"]').forEach((x) => (typed[x.id] = x.type === "checkbox" ? x.checked : x.value));
   if (!sheetEl) {
     sheetEl = document.createElement("div");
     sheetEl.id = "sheet-wrap";
@@ -710,6 +755,10 @@ function renderSheet() {
   sheetEl.innerHTML = sheetHtml;
   const nb = sheetEl.querySelector(".sheet-body");
   if (nb) nb.scrollTop = scroll;
+  for (const [id, v] of Object.entries(typed)) {
+    const x = document.getElementById(id);
+    if (x) { if (x.type === "checkbox") { x.checked = v; x.closest(".op")?.classList.toggle("off", !v); } else x.value = v; }
+  }
 }
 
 function sheet(p) {
@@ -764,6 +813,151 @@ function sheet(p) {
       ${S.sub === "time" ? timeTab(p, time, tasks) : S.sub === "payments" ? paymentsTab(p, pays, m) : S.sub === "details" ? detailsTab(p) : tasksTab(p, tasks)}
     </div>
   </aside>`;
+}
+
+/* ----- review queue (suggestions from email) ----- */
+function reviewSheet() {
+  const list = S.suggestions;
+  return `<div class="scrim" data-act="close-review"></div>
+  <aside class="sheet" role="dialog" aria-label="Review changes from email">
+    <div class="sheet-head">
+      <div class="sheet-title"><h2 style="flex:1">Review from email</h2>
+        <button class="icon-btn" data-act="close-review" aria-label="Close"><svg width="16" height="16" viewBox="0 0 16 16" stroke="currentColor" stroke-width="1.6"><path d="M3 3l10 10M13 3L3 13"/></svg></button></div>
+      <p class="muted" style="margin:0;font-size:13px">Your morning email check found these. Nothing is added to the tracker until you accept it. Fix any field first if it isn't quite right, or untick a part you don't want.</p>
+    </div>
+    <div class="sheet-body">${list.length ? list.map(sgCard).join("") : `<div class="panel list-empty">All reviewed. New suggestions will appear here after the next morning check.</div>`}</div>
+  </aside>`;
+}
+
+function sgRefs(s) {
+  const refs = {};
+  (s.ops || []).forEach((o) => { if (o.action === "insert" && o.ref) refs[o.ref] = { table: o.table, label: o.values?.name || o.values?.label || TABLE_LABEL[o.table] }; });
+  return refs;
+}
+
+function sgCard(s) {
+  const ops = Array.isArray(s.ops) ? s.ops : [];
+  const refs = sgRefs(s);
+  const who = s.email_mailbox === "sent" ? `You → ${esc(s.email_to || "")}` : esc(s.email_from || "");
+  const when = s.email_date ? new Date(s.email_date).toLocaleDateString("en-GB", { day: "numeric", month: "short" }) : "";
+  const url = /^https:\/\/mail\.google\.com\//.test(s.email_url || "") ? s.email_url : s.email_thread_id ? `https://mail.google.com/mail/u/0/#all/${encodeURIComponent(s.email_thread_id)}` : "";
+  return `<article class="sg">
+    <div class="sg-head"><span class="pill kind">${KIND_LABEL[s.kind] || s.kind}</span>
+      ${s.confidence !== "high" ? `<span class="pill ${s.confidence}">${s.confidence === "low" ? "Unsure" : "Likely"}</span>` : ""}
+      <span class="spacer"></span><span class="muted">${when}</span></div>
+    <h3>${esc(s.title)}</h3>
+    ${s.reason ? `<p class="sg-reason">${esc(s.reason)}</p>` : ""}
+    <div class="sg-mail">
+      <div class="meta"><b>${who}</b><span>${esc(s.email_subject || "")}</span>${url ? `<a href="${esc(url)}" target="_blank" rel="noopener">Open in Gmail ↗</a>` : ""}</div>
+      ${s.email_excerpt ? `<blockquote>${esc(s.email_excerpt)}</blockquote>` : ""}
+    </div>
+    ${ops.map((o, i) => opEditor(s, o, i, refs)).join("")}
+    <div class="sg-foot">
+      <button class="btn ghost" data-act="sg-dismiss" data-id="${s.id}">Dismiss</button>
+      <button class="btn primary" data-act="sg-accept" data-id="${s.id}">Accept</button>
+    </div>
+  </article>`;
+}
+
+function showValue(table, f, v) {
+  if (v == null || v === "" || (Array.isArray(v) && !v.length)) return "empty";
+  if (f === "client_id") return S.clients.find((c) => c.id === v)?.name || "unknown client";
+  if (f === "project_id") return projectOf(v)?.name || "unknown project";
+  if (f === "stage") return STAGES[STAGE_IDX[v]]?.label || v;
+  if (f === "status") return (table === "payments" ? PAY_LABEL : table === "tasks" ? TASK_LABEL : PROJECT_STATUS)[v] || v;
+  if (f === "billing_mode") return BILLING[v] || v;
+  if (f.endsWith("_date")) return fmtDateY(v);
+  if (NUM_FIELDS.includes(f)) return f === "included_hours" ? hrs(v) : eur(v);
+  if (Array.isArray(v)) return v.join(", ");
+  return String(v);
+}
+
+function opEditor(s, o, i, refs) {
+  const allowed = ALLOWED[o.table];
+  if (!allowed || !["insert", "update"].includes(o.action)) return "";
+  const fields = Object.keys(o.values || {}).filter((k) => allowed.includes(k));
+  const current = o.action === "update" ? S[o.table].find((r) => r.id === o.id) : null;
+  const pre = `sg-${s.id}-${i}`;
+  const missing = o.action === "update" && !current;
+  const heading = o.action === "insert" ? `Add ${TABLE_LABEL[o.table]}`
+    : `Update ${TABLE_LABEL[o.table]} · ${missing ? "no longer in the tracker" : esc(current.name || current.label || showValue(o.table, "amount", current.amount))}`;
+  return `<div class="op ${missing ? "off" : ""}">
+    <label class="check"><input type="checkbox" id="${pre}-inc" data-act="sg-toggle" ${missing ? "disabled" : "checked"}> <b>${heading}</b></label>
+    <div class="op-fields">${fields.map((f) => {
+      const changed = current && JSON.stringify(current[f] ?? null) !== JSON.stringify(o.values[f] ?? null);
+      const wide = ["description", "notes", "note", "name"].includes(f) && o.table !== "payments";
+      return `<label class="field ${wide ? "wide" : ""}"><span>${FIELD_LABEL[f] || f}${changed ? ` <span class="was">· now ${esc(showValue(o.table, f, current[f]))}</span>` : ""}</span>${fieldInput(`${pre}-${f}`, o.table, f, o.values[f], refs)}</label>`;
+    }).join("")}</div>
+  </div>`;
+}
+
+function fieldInput(id, table, f, v, refs) {
+  const val = v == null ? "" : v;
+  const opts = (pairs) => pairs.map(([k, l]) => `<option value="${esc(k)}" ${String(val) === String(k) ? "selected" : ""}>${esc(l)}</option>`).join("");
+  if (f === "client_id" || f === "project_id") {
+    const t = f === "client_id" ? "clients" : "projects";
+    const fresh = Object.entries(refs).filter(([, r]) => r.table === t).map(([k, r]) => ["$" + k, "New: " + r.label]);
+    return `<select class="input" id="${id}"><option value="">None</option>${opts(fresh)}${opts(S[t].map((x) => [x.id, x.name + (t === "projects" && clientOf(x) ? " · " + clientOf(x).name : "")]))}</select>`;
+  }
+  if (f === "stage") return `<select class="input" id="${id}">${opts(STAGES.map((x) => [x.key, x.label]))}</select>`;
+  if (f === "billing_mode") return `<select class="input" id="${id}">${opts(Object.entries(BILLING))}</select>`;
+  if (f === "status") {
+    const m = table === "payments" ? PAY_LABEL : table === "tasks" ? TASK_LABEL : PROJECT_STATUS;
+    return `<select class="input" id="${id}">${opts(Object.entries(m))}</select>`;
+  }
+  if (f === "tags") return `<input class="input" id="${id}" value="${esc((val || []).map((t) => "#" + t).join(" "))}">`;
+  if (f === "skipped_stages") return `<input class="input" id="${id}" value="${esc((val || []).join(", "))}" placeholder="e.g. production, review">`;
+  if (["description", "notes", "note"].includes(f)) return `<textarea class="input" id="${id}" rows="3">${esc(val)}</textarea>`;
+  if (f.endsWith("_date")) return `<input class="input" type="date" id="${id}" value="${esc(val)}">`;
+  if (f === "color") return `<input type="color" id="${id}" value="${esc(val || "#6b7280")}" style="width:44px;height:34px;padding:0;border:0;background:none">`;
+  if (NUM_FIELDS.includes(f)) return `<input class="input fig" id="${id}" inputmode="decimal" value="${esc(val)}">`;
+  return `<input class="input" id="${id}" value="${esc(val)}">`;
+}
+
+function readField(f, raw) {
+  if (f === "tags") return parseTags(raw);
+  if (f === "skipped_stages") return String(raw || "").split(/[,\s]+/).map((x) => x.trim().toLowerCase()).filter((x) => STAGE_IDX[x] != null && x !== "brief" && x !== "paid");
+  if (NUM_FIELDS.includes(f)) { const n = numOrNull(raw); return n == null || !Number.isFinite(n) ? null : n; }
+  const t = String(raw ?? "").trim();
+  return t === "" ? null : t;
+}
+
+async function acceptSuggestion(s) {
+  const refs = {};
+  const ops = Array.isArray(s.ops) ? s.ops : [];
+  for (let i = 0; i < ops.length; i++) {
+    const o = ops[i], pre = `sg-${s.id}-${i}`;
+    const inc = document.getElementById(pre + "-inc");
+    if (!inc || !inc.checked || inc.disabled) continue;
+    const allowed = ALLOWED[o.table];
+    const rec = {};
+    for (const f of Object.keys(o.values || {})) {
+      if (!allowed.includes(f)) continue;
+      const el = document.getElementById(`${pre}-${f}`);
+      let v = el ? (f === "color" ? el.value : readField(f, el.value)) : o.values[f];
+      if ((f === "client_id" || f === "project_id") && typeof v === "string" && v.startsWith("$")) v = refs[v.slice(1)] || null;
+      rec[f] = v;
+    }
+    if (o.action === "update") {
+      if (!o.id) continue;
+      await save(o.table, { id: o.id, ...rec }, { quiet: true });
+    } else {
+      if (o.table === "clients" && !rec.color) rec.color = COLORS[S.clients.length % COLORS.length];
+      if (o.table === "projects") { rec.stage = rec.stage || "brief"; rec.start_date = rec.start_date || today(); }
+      if ((o.table === "payments" || o.table === "tasks") && !rec.project_id) { toast(`Choose a project for the ${TABLE_LABEL[o.table]} before accepting.`, "bad"); throw new Error("missing project"); }
+      if (o.table === "payments" && rec.status === "received" && !rec.paid_date) rec.paid_date = today();
+      const row = await save(o.table, rec, { quiet: true });
+      if (o.ref) refs[o.ref] = row.id;
+    }
+  }
+}
+
+async function resolveSuggestion(id, status) {
+  const { error } = await sb.from("suggestions").update({ status, resolved_at: new Date().toISOString() }).eq("id", id);
+  if (error) { toast("Couldn't update the suggestion: " + error.message, "bad"); throw error; }
+  S.suggestions = S.suggestions.filter((x) => x.id !== id);
+  if (!S.suggestions.length) S.review = false;
+  render();
 }
 
 function tasksTab(p, tasks) {
@@ -1154,6 +1348,16 @@ const actions = {
   view(el) { S.view = el.dataset.v; store.set("view", S.view); render(); window.scrollTo(0, 0); },
   open(el) { S.open = el.dataset.id; if (el.dataset.sub) S.sub = el.dataset.sub; S.editSteps = false; renderSheet(); },
   "close-sheet"() { S.open = null; S.editSteps = false; renderSheet(); },
+  "open-review"() { S.review = true; S.open = null; renderSheet(); },
+  "close-review"() { S.review = false; renderSheet(); },
+  "sg-toggle"(el) { el.closest(".op")?.classList.toggle("off", !el.checked); },
+  async "sg-accept"(el) {
+    const s = S.suggestions.find((x) => x.id === el.dataset.id); if (!s) return;
+    el.disabled = true;
+    try { await acceptSuggestion(s); await resolveSuggestion(s.id, "accepted"); toast("Added to the tracker"); }
+    catch (e) { el.disabled = false; render(); }
+  },
+  async "sg-dismiss"(el) { el.disabled = true; try { await resolveSuggestion(el.dataset.id, "dismissed"); } catch { el.disabled = false; } },
   "close-modal"() { closeModal(); },
   "new-project"() { newProjectModal(); },
   "new-client"() { newClientModal(); },
@@ -1220,6 +1424,7 @@ document.addEventListener("click", (e) => {
   const el = e.target.closest("[data-act]");
   if (el) {
     if (el.tagName === "INPUT" && el.type === "checkbox" && el.dataset.act === "toggle-billable") return; // handled on change
+    if (el.dataset.act === "sg-toggle") { actions["sg-toggle"](el); return; }
     const fn = actions[el.dataset.act];
     if (fn) { e.preventDefault(); Promise.resolve(fn(el, e)).catch(() => {}); }
     return;
@@ -1228,7 +1433,7 @@ document.addEventListener("click", (e) => {
   if (c) { S.open = c.dataset.card; S.editSteps = false; renderSheet(); }
 });
 document.addEventListener("keydown", (e) => {
-  if (e.key === "Escape") { if ($("#modal-wrap")) closeModal(); else if (S.open) { S.open = null; renderSheet(); } }
+  if (e.key === "Escape") { if ($("#modal-wrap")) closeModal(); else if (S.review) { S.review = false; renderSheet(); } else if (S.open) { S.open = null; renderSheet(); } }
   if (e.key === "Enter" && e.target.matches("[data-card]")) { S.open = e.target.dataset.card; renderSheet(); }
   if (e.key === "Enter" && e.target.matches("input[data-ts], input[data-tfield], input[data-yfield], input[data-cfield]")) e.target.blur();
 });
@@ -1434,7 +1639,7 @@ sb.auth.onAuthStateChange((event, session) => {
   const was = S.user?.id;
   S.user = session?.user || null;
   if (S.user && S.user.id !== was) { S.loaded = false; render(); loadAll(); }
-  else if (!S.user) { S.loaded = false; S.open = null; TABLES.forEach((t) => (S[t] = [])); render(); }
+  else if (!S.user) { S.loaded = false; S.open = null; S.review = false; S.suggestions = []; TABLES.forEach((t) => (S[t] = [])); render(); }
 });
 </script>
 </body>
